@@ -77,6 +77,13 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 - [x] Weapon Upgrade: "Laser Upgrade" ($300) - clicks deal 3 damage to alien instead of 1
 - [x] Alien Lethality: Ensure alien actively kills fish on contact (visual death effect)
 
+### Phase 9: Balance and Polish
+- [x] Carnivore Resilience: Aliens take 2 seconds to kill a carnivore (instead of instant), giving it time to fight back
+- [x] Hungry Speed Boost: Fish move 30% faster when hunger > 50%
+- [x] Satiation Cap: Fish ignore pellets when hunger < 10 (prevents food waste)
+- [x] Multiple Stinkies: Allow purchasing additional Stinkies ($500 + $250 per owned)
+- [x] Feeder Fish ($1500): Slow orange fish that drops a pellet every 15-20 seconds; doesn't need to eat
+
 ---
 
 ## Status Log
@@ -162,3 +169,21 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
   - 'dying' state with float-up, sound effect, blood + bubble particles
 - Save/Load updated to include breeders and laserUpgraded state
 - Shop UI expanded with Breeder (pink) and Laser (cyan) buttons
+
+**Iteration 10:** Phase 9 Complete - Balance and Polish:
+- Carnivore Resilience: Aliens take 2 seconds to kill carnivores
+  - Added beingEatenTimer to Carnivore class
+  - Visual danger bar shows progress toward death
+  - Timer resets/recovers when carnivore escapes alien
+- Hungry Speed Boost: Guppies and Breeders move 30% faster when hunger > 50%
+- Satiation Cap: Fish ignore pellets when hunger < 10 (prevents food waste)
+- Multiple Stinkies: Converted from single pet to array
+  - Scaling cost: $500 base + $250 per Stinky owned
+  - Each Stinky spawns at random bottom position
+  - Button shows count and next purchase cost
+- Feeder Fish ($1500): New autonomous food source
+  - Slow orange fish that wanders the tank
+  - Drops a pellet every 15-20 seconds
+  - Doesn't need to eat (no hunger system)
+  - Visual indicator when about to drop food
+- Save/Load updated for stinky count and feeders

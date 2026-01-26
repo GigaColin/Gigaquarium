@@ -67,13 +67,15 @@ const CARNIVORE_COST = 1000;
 const STINKY_COST = 500;
 const BREEDER_COST = 750;
 const LASER_COST = 300;
+const FEEDER_COST = 1500;
 
 let foodUpgraded = false;
 let laserUpgraded = false;
 const breeders = [];
+const feeders = [];
 
-// Pet system
-let stinky = null;
+// Pet system - multiple stinkies allowed
+const stinkies = [];
 
 // Alien system
 let alien = null;
@@ -321,7 +323,7 @@ function saveGame() {
     gold: gold,
     foodUpgraded: foodUpgraded,
     laserUpgraded: laserUpgraded,
-    hasStinky: stinky !== null,
+    stinkyCount: stinkies.length,
     guppies: guppies.map(g => ({
       x: g.x,
       y: g.y,
@@ -339,6 +341,11 @@ function saveGame() {
       y: b.y,
       hunger: b.hunger,
       breedTimer: b.breedTimer
+    })),
+    feeders: feeders.map(f => ({
+      x: f.x,
+      y: f.y,
+      dropTimer: f.dropTimer
     })),
     timestamp: Date.now()
   };
@@ -373,11 +380,12 @@ function loadGame() {
       updateLaserButtonState();
     }
 
-    // Restore Stinky
-    if (saveData.hasStinky) {
-      stinky = new Stinky();
-      updateStinkyButtonState();
+    // Restore Stinkies (support both old hasStinky and new stinkyCount)
+    const stinkyCount = saveData.stinkyCount || (saveData.hasStinky ? 1 : 0);
+    for (let i = 0; i < stinkyCount; i++) {
+      stinkies.push(new Stinky());
     }
+    updateStinkyButtonState();
 
     // Restore guppies
     if (saveData.guppies) {
@@ -407,6 +415,15 @@ function loadGame() {
         breeder.hunger = Math.min(bData.hunger, 50);
         breeder.breedTimer = bData.breedTimer || (20 + Math.random() * 10);
         breeders.push(breeder);
+      }
+    }
+
+    // Restore feeders
+    if (saveData.feeders) {
+      for (const fData of saveData.feeders) {
+        const feeder = new Feeder(fData.x, fData.y);
+        feeder.dropTimer = fData.dropTimer || (15 + Math.random() * 5);
+        feeders.push(feeder);
       }
     }
 
@@ -558,8 +575,10 @@ class Guppy {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist > 5) {
-      this.x += (dx / dist) * this.speed * dt;
-      this.y += (dy / dist) * this.speed * dt;
+      // Hungry speed boost - 30% faster when hunger > 50
+      const currentSpeed = this.hunger > 50 ? this.speed * 1.3 : this.speed;
+      this.x += (dx / dist) * currentSpeed * dt;
+      this.y += (dy / dist) * currentSpeed * dt;
       this.facingLeft = dx < 0;
     }
 
@@ -599,6 +618,9 @@ class Guppy {
   }
 
   checkPelletCollision() {
+    // Satiation cap - ignore pellets when full (hunger < 10)
+    if (this.hunger < 10) return;
+
     for (let i = pellets.length - 1; i >= 0; i--) {
       const pellet = pellets[i];
       const dx = pellet.x - this.x;
@@ -762,6 +784,10 @@ class Carnivore {
     // Alien attack timer
     this.attackTimer = 0;
     this.attackCooldown = 0.5; // Attack every 0.5 seconds
+
+    // Resilience - takes 2 seconds for alien to kill
+    this.beingEatenTimer = 0;
+    this.beingEatenDuration = 2; // Survives 2 seconds of alien attack
   }
 
   update(dt) {
@@ -790,6 +816,18 @@ class Carnivore {
     if (this.coinTimer <= 0) {
       coins.push(new Coin(this.x, this.y, 'diamond'));
       this.coinTimer = 15;
+    }
+
+    // Reset being eaten timer if alien is gone or far away
+    if (!alien || alien.dead) {
+      this.beingEatenTimer = 0;
+    } else {
+      const alienDx = alien.x - this.x;
+      const alienDy = alien.y - this.y;
+      const alienDist = Math.sqrt(alienDx * alienDx + alienDy * alienDy);
+      if (alienDist > this.size + alien.size) {
+        this.beingEatenTimer = Math.max(0, this.beingEatenTimer - dt * 2); // Recover when away
+      }
     }
 
     // PRIORITY 1: Attack alien if present!
@@ -1004,6 +1042,33 @@ class Carnivore {
       ctx.font = 'bold 12px Arial';
       ctx.fillText('HUNGRY!', this.x, this.y - this.size * 0.5 - 10);
     }
+
+    // Being eaten indicator (resilience bar)
+    if (this.beingEatenTimer > 0 && this.state !== 'dying') {
+      const barWidth = 40;
+      const barHeight = 6;
+      const barX = this.x - barWidth / 2;
+      const barY = this.y - this.size * 0.5 - 25;
+      const progress = this.beingEatenTimer / this.beingEatenDuration;
+
+      // Background
+      ctx.fillStyle = '#333';
+      ctx.fillRect(barX, barY, barWidth, barHeight);
+
+      // Danger fill (red as it fills)
+      ctx.fillStyle = `rgb(${Math.floor(255 * progress)}, ${Math.floor(100 * (1 - progress))}, 0)`;
+      ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+
+      // Border
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+      // Warning text
+      ctx.fillStyle = '#ff0000';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('DANGER!', this.x, barY - 3);
+    }
   }
 }
 
@@ -1088,8 +1153,10 @@ class Breeder {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist > 5) {
-      this.x += (dx / dist) * this.speed * dt;
-      this.y += (dy / dist) * this.speed * dt;
+      // Hungry speed boost - 30% faster when hunger > 50
+      const currentSpeed = this.hunger > 50 ? this.speed * 1.3 : this.speed;
+      this.x += (dx / dist) * currentSpeed * dt;
+      this.y += (dy / dist) * currentSpeed * dt;
       this.facingLeft = dx < 0;
     }
 
@@ -1116,6 +1183,9 @@ class Breeder {
   }
 
   checkPelletCollision() {
+    // Satiation cap - ignore pellets when full (hunger < 10)
+    if (this.hunger < 10) return;
+
     for (let i = pellets.length - 1; i >= 0; i--) {
       const pellet = pellets[i];
       const dx = pellet.x - this.x;
@@ -1237,6 +1307,152 @@ class Breeder {
       ctx.fillStyle = `rgba(255, 105, 180, ${0.5 + progress * 0.5})`;
       ctx.font = 'bold 10px Arial';
       ctx.fillText('Ready!', this.x, this.y - this.size - 10);
+    }
+  }
+}
+
+// ============================================
+// Feeder Class (Drops Pellets, Doesn't Eat)
+// ============================================
+class Feeder {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.targetX = x;
+    this.targetY = y;
+    this.speed = 30; // Very slow moving
+    this.facingLeft = false;
+    this.wanderTimer = 0;
+    this.size = 28;
+
+    // Pellet dropping timer - spawns pellet every 15-20 seconds
+    this.dropTimer = 15 + Math.random() * 5;
+
+    // Animation
+    this.wobble = 0;
+  }
+
+  update(dt) {
+    this.wobble += dt * 2;
+
+    // Pellet drop timer
+    this.dropTimer -= dt;
+    if (this.dropTimer <= 0) {
+      // Drop a pellet!
+      const offsetX = (Math.random() - 0.5) * 20;
+      pellets.push(new Pellet(this.x + offsetX, this.y + this.size * 0.5));
+      sound.play('feed');
+      spawnParticles(this.x, this.y, 'bubble', 2);
+      this.dropTimer = 15 + Math.random() * 5;
+    }
+
+    // Wander slowly
+    this.wanderTimer -= dt;
+    if (this.wanderTimer <= 0) {
+      const newPos = tankManager.getRandomPosition();
+      this.targetX = newPos.x;
+      this.targetY = newPos.y;
+      this.wanderTimer = 4 + Math.random() * 4; // Slow wander changes
+    }
+
+    // Movement
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 5) {
+      this.x += (dx / dist) * this.speed * dt;
+      this.y += (dy / dist) * this.speed * dt;
+      this.facingLeft = dx < 0;
+    }
+
+    const clamped = tankManager.clampToTank(this.x, this.y);
+    this.x = clamped.x;
+    this.y = clamped.y;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.facingLeft) {
+      ctx.scale(-1, 1);
+    }
+
+    // Subtle bobbing animation
+    const bobY = Math.sin(this.wobble) * 2;
+    ctx.translate(0, bobY);
+
+    // Body color - orange
+    const bodyColor = '#ff8c00';
+    const bellyColor = '#ffa500';
+
+    // Body - round, plump shape
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size, this.size * 0.65, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Belly
+    ctx.fillStyle = bellyColor;
+    ctx.beginPath();
+    ctx.ellipse(0, this.size * 0.15, this.size * 0.7, this.size * 0.35, 0, 0, Math.PI);
+    ctx.fill();
+
+    // Tail
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.moveTo(-this.size, 0);
+    ctx.lineTo(-this.size - 12, -10);
+    ctx.lineTo(-this.size - 12, 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // Dorsal fin (small)
+    ctx.beginPath();
+    ctx.moveTo(-5, -this.size * 0.55);
+    ctx.lineTo(3, -this.size * 0.8);
+    ctx.lineTo(10, -this.size * 0.55);
+    ctx.closePath();
+    ctx.fill();
+
+    // Food pouch indicator (bulge on belly)
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.ellipse(this.size * 0.2, this.size * 0.2, 8, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eye
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(this.size * 0.4, -this.size * 0.15, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.arc(this.size * 0.45, -this.size * 0.15, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Outline
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size, this.size * 0.65, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Label
+    ctx.fillStyle = '#ff8c00';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('FEEDER', this.x, this.y + this.size + 15);
+
+    // Drop progress indicator
+    if (this.dropTimer < 5) {
+      const progress = 1 - (this.dropTimer / 5);
+      ctx.fillStyle = `rgba(255, 140, 0, ${0.5 + progress * 0.5})`;
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('Dropping...', this.x, this.y - this.size - 5);
     }
   }
 }
@@ -1448,12 +1664,26 @@ class Sylvester {
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist < this.size * 0.5 + target.size) {
-        // Eat the fish! Trigger death animation for visual feedback
-        target.state = 'dying';
-        target.deathTimer = 0;
-        sound.play('death');
-        spawnParticles(target.x, target.y, 'blood', 10);
-        spawnParticles(target.x, target.y, 'bubble', 5);
+        // Check if target is a carnivore (has resilience)
+        if (target.beingEatenTimer !== undefined) {
+          // Carnivore resilience - takes 2 seconds to kill
+          target.beingEatenTimer += dt;
+          if (target.beingEatenTimer >= target.beingEatenDuration) {
+            // Finally kill the carnivore
+            target.state = 'dying';
+            target.deathTimer = 0;
+            sound.play('death');
+            spawnParticles(target.x, target.y, 'blood', 10);
+            spawnParticles(target.x, target.y, 'bubble', 5);
+          }
+        } else {
+          // Instant kill for other fish
+          target.state = 'dying';
+          target.deathTimer = 0;
+          sound.play('death');
+          spawnParticles(target.x, target.y, 'blood', 10);
+          spawnParticles(target.x, target.y, 'bubble', 5);
+        }
       }
     }
 
@@ -1656,7 +1886,8 @@ class Sylvester {
 // ============================================
 class Stinky {
   constructor() {
-    this.x = tankManager.bounds.right / 2;
+    // Random starting position along the bottom
+    this.x = tankManager.padding + Math.random() * (tankManager.bounds.right - tankManager.padding * 2);
     this.y = tankManager.bounds.bottom - tankManager.padding;
     this.targetX = this.x;
     this.speed = 40;
@@ -1925,10 +2156,16 @@ function buyCarnivore() {
   }
 }
 
+function getStinkyCost() {
+  // $500 base + $250 for each owned
+  return STINKY_COST + (stinkies.length * 250);
+}
+
 function buyStinky() {
-  if (!stinky && gold >= STINKY_COST) {
-    gold -= STINKY_COST;
-    stinky = new Stinky();
+  const cost = getStinkyCost();
+  if (gold >= cost) {
+    gold -= cost;
+    stinkies.push(new Stinky());
     sound.play('buy');
     updateGoldDisplay();
     updateStinkyButtonState();
@@ -1937,9 +2174,12 @@ function buyStinky() {
 
 function updateStinkyButtonState() {
   const btn = document.getElementById('buyStinkyBtn');
-  if (btn && stinky) {
-    btn.disabled = true;
-    btn.textContent = 'Stinky Active!';
+  if (btn) {
+    const cost = getStinkyCost();
+    btn.textContent = `Buy Stinky ($${cost})`;
+    if (stinkies.length > 0) {
+      btn.textContent = `Buy Stinky x${stinkies.length + 1} ($${cost})`;
+    }
   }
 }
 
@@ -1960,6 +2200,16 @@ function buyLaser() {
     sound.play('buy');
     updateGoldDisplay();
     updateLaserButtonState();
+  }
+}
+
+function buyFeeder() {
+  if (gold >= FEEDER_COST) {
+    gold -= FEEDER_COST;
+    const pos = tankManager.getRandomPosition();
+    feeders.push(new Feeder(pos.x, pos.y));
+    sound.play('buy');
+    updateGoldDisplay();
   }
 }
 
@@ -1994,6 +2244,7 @@ window.buyCarnivore = buyCarnivore;
 window.buyStinky = buyStinky;
 window.buyBreeder = buyBreeder;
 window.buyLaser = buyLaser;
+window.buyFeeder = buyFeeder;
 window.toggleSound = toggleSound;
 window.saveGame = saveGame;
 window.newGame = newGame;
@@ -2086,8 +2337,14 @@ function gameLoop(timestamp) {
     }
   }
 
-  // Update and draw Stinky (pet)
-  if (stinky) {
+  // Update and draw feeders
+  for (const feeder of feeders) {
+    feeder.update(dt);
+    feeder.draw(ctx);
+  }
+
+  // Update and draw Stinkies (pets)
+  for (const stinky of stinkies) {
     stinky.update(dt);
     stinky.draw(ctx);
   }
