@@ -17,7 +17,8 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 | Guppy (M) | Pellets | Silver ($15) | Evolves to (L) after 5 more feedings |
 | Guppy (L) | Pellets | Gold ($35) | Evolves to King after 10 more feedings |
 | King Guppy | Pellets | Diamond ($200) | Final evolution stage |
-| Carnivore | Small Guppies | Diamond ($200) | Eats living fish to survive |
+| Carnivore | Small Guppies | Diamond ($200) | Eats living fish to survive, attacks aliens |
+| Breeder | Pellets | None | Slowly spawns small guppies over time |
 
 ## Core Loop Task List
 
@@ -41,7 +42,7 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 - [x] Coin Dropping: Medium guppies drop Silver ($15), Large drop Gold ($35), Kings drop Diamond ($200)
 - [x] Drop Timer: Coins drop every 10-15 seconds per fish
 - [x] Coin Physics: Coins sink slowly with wobble effect
-- [x] Coin Timeout: Coins flash and disappear after 10 seconds if not collected
+- [~] Coin Timeout: ~~Coins flash and disappear after 10 seconds~~ → Phase 8: coins persist forever
 - [x] Coin Collection: Clicking a coin adds value to TotalGold
 - [x] Shop UI: Top-bar with "Buy Guppy" ($100) and "Upgrade Food" ($200)
 - [x] Food Upgrade: Upgraded pellets set hunger to -25 (50% longer before hungry)
@@ -58,6 +59,7 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 - [x] Carnivore AI: Hunts and eats Small guppies when hungry (>40%)
 - [x] Carnivore Drops: Drops Diamond ($200) every 15 seconds
 - [x] Balance: High risk/reward - faster when hunting, visual warning when hungry
+- [x] **Phase 8 Addition:** Carnivores attack aliens when present
 
 ### Phase 6: Automation (Pets)
 - [x] Stinky the Snail: Moves along tank bottom, auto-collects floor coins
@@ -67,6 +69,13 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 - [x] Sound effects (feeding, coin collect, evolution, alien warning, hits, death, buy, victory)
 - [x] LocalStorage save/load with auto-save every 30 seconds
 - [x] Particle effects (bubbles, sparkles on evolution, coin sparkles, blood on alien hit)
+
+### Phase 8: Balance & New Content
+- [x] Carnivore vs Alien: Carnivores attack Sylvester when he arrives (deals damage over time)
+- [x] Coin Persistence: Remove coin expiration - coins stay until collected
+- [x] Breeder Fish: New fish type ($750) that slowly spawns small guppies every 20-30 seconds
+- [x] Weapon Upgrade: "Laser Upgrade" ($300) - clicks deal 3 damage to alien instead of 1
+- [x] Alien Lethality: Ensure alien actively kills fish on contact (visual death effect)
 
 ---
 
@@ -137,3 +146,19 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
   - Load on game start, hunger capped at 50% on load
 - UI controls: Sound toggle, manual Save, New Game button
 - Ambient bubbles rise from tank bottom randomly
+
+**Iteration 9:** Phase 8 Complete - Balance & New Content:
+- Carnivore vs Alien: Carnivores now attack Sylvester when he arrives
+  - Blue 'attacking' state, moves 50% faster toward alien
+  - Deals damage every 0.5 seconds, spawns blood particles
+- Coin Persistence: Removed coin expiration - coins stay until collected
+- Breeder Fish ($750): Pink maternal fish that spawns guppies
+  - Spawns new small guppy every 20-30 seconds (if hunger < 70%)
+  - Eats pellets like guppies, heart indicator when breeding soon
+  - Can be hunted by aliens
+- Laser Upgrade ($300): Clicks deal 3 damage to alien instead of 1
+  - More blood particles on hit for visual feedback
+- Alien Lethality: Alien kills now trigger proper death animation
+  - 'dying' state with float-up, sound effect, blood + bubble particles
+- Save/Load updated to include breeders and laserUpgraded state
+- Shop UI expanded with Breeder (pink) and Laser (cyan) buttons

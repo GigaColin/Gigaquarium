@@ -65,8 +65,12 @@ const GUPPY_COST = 100;
 const FOOD_UPGRADE_COST = 200;
 const CARNIVORE_COST = 1000;
 const STINKY_COST = 500;
+const BREEDER_COST = 750;
+const LASER_COST = 300;
 
 let foodUpgraded = false;
+let laserUpgraded = false;
+const breeders = [];
 
 // Pet system
 let stinky = null;
@@ -316,6 +320,7 @@ function saveGame() {
   const saveData = {
     gold: gold,
     foodUpgraded: foodUpgraded,
+    laserUpgraded: laserUpgraded,
     hasStinky: stinky !== null,
     guppies: guppies.map(g => ({
       x: g.x,
@@ -328,6 +333,12 @@ function saveGame() {
       x: c.x,
       y: c.y,
       hunger: c.hunger
+    })),
+    breeders: breeders.map(b => ({
+      x: b.x,
+      y: b.y,
+      hunger: b.hunger,
+      breedTimer: b.breedTimer
     })),
     timestamp: Date.now()
   };
@@ -357,6 +368,11 @@ function loadGame() {
       updateFoodButtonState();
     }
 
+    laserUpgraded = saveData.laserUpgraded || false;
+    if (laserUpgraded) {
+      updateLaserButtonState();
+    }
+
     // Restore Stinky
     if (saveData.hasStinky) {
       stinky = new Stinky();
@@ -381,6 +397,16 @@ function loadGame() {
         const carnivore = new Carnivore(cData.x, cData.y);
         carnivore.hunger = Math.min(cData.hunger, 50);
         carnivores.push(carnivore);
+      }
+    }
+
+    // Restore breeders
+    if (saveData.breeders) {
+      for (const bData of saveData.breeders) {
+        const breeder = new Breeder(bData.x, bData.y);
+        breeder.hunger = Math.min(bData.hunger, 50);
+        breeder.breedTimer = bData.breedTimer || (20 + Math.random() * 10);
+        breeders.push(breeder);
       }
     }
 
@@ -732,6 +758,10 @@ class Carnivore {
 
     // Hunting
     this.targetFish = null;
+
+    // Alien attack timer
+    this.attackTimer = 0;
+    this.attackCooldown = 0.5; // Attack every 0.5 seconds
   }
 
   update(dt) {
@@ -762,8 +792,30 @@ class Carnivore {
       this.coinTimer = 15;
     }
 
-    // Hunting behavior - only hunt small guppies when hungry
-    if (this.hunger > 40) {
+    // PRIORITY 1: Attack alien if present!
+    if (alien && !alien.dead && !alien.entering) {
+      this.state = 'attacking';
+      this.targetX = alien.x;
+      this.targetY = alien.y;
+      this.targetFish = null;
+
+      // Check if close enough to attack
+      const dx = alien.x - this.x;
+      const dy = alien.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < this.size + alien.size * 0.5) {
+        // Attack the alien!
+        this.attackTimer -= dt;
+        if (this.attackTimer <= 0) {
+          alien.takeDamage();
+          spawnParticles(alien.x, alien.y, 'blood', 3);
+          this.attackTimer = this.attackCooldown;
+        }
+      }
+    }
+    // PRIORITY 2: Hunt small guppies when hungry (no alien present)
+    else if (this.hunger > 40) {
       this.state = 'hunting';
       this.targetFish = this.findSmallGuppy();
 
@@ -805,7 +857,7 @@ class Carnivore {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist > 5) {
-      const currentSpeed = this.state === 'hunting' ? this.speed * 1.5 : this.speed;
+      const currentSpeed = (this.state === 'hunting' || this.state === 'attacking') ? this.speed * 1.5 : this.speed;
       this.x += (dx / dist) * currentSpeed * dt;
       this.y += (dy / dist) * currentSpeed * dt;
       this.facingLeft = dx < 0;
@@ -854,6 +906,9 @@ class Carnivore {
     if (this.state === 'dying') {
       bodyColor = '#808080';
       bellyColor = '#a0a0a0';
+    } else if (this.state === 'attacking') {
+      bodyColor = '#4169e1'; // Royal blue when attacking alien
+      bellyColor = '#87ceeb';
     } else if (this.state === 'hunting') {
       bodyColor = '#8b0000'; // Dark red when hunting
       bellyColor = '#ff6347';
@@ -953,6 +1008,240 @@ class Carnivore {
 }
 
 // ============================================
+// Breeder Class (Produces Guppies)
+// ============================================
+class Breeder {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.targetX = x;
+    this.targetY = y;
+    this.speed = 40; // Slow moving
+    this.hunger = 0;
+    this.state = 'wandering';
+    this.facingLeft = false;
+    this.wanderTimer = 0;
+    this.size = 35;
+
+    // Death animation
+    this.deathTimer = 0;
+
+    // Breeding timer - spawns guppy every 20-30 seconds
+    this.breedTimer = 20 + Math.random() * 10;
+  }
+
+  update(dt) {
+    // Handle dying state
+    if (this.state === 'dying') {
+      this.deathTimer += dt;
+      this.y -= 25 * dt;
+      if (this.y < tankManager.padding || this.deathTimer > 3) {
+        this.state = 'dead';
+      }
+      return;
+    }
+
+    // Hunger increases slowly
+    this.hunger += dt * 4;
+
+    if (this.hunger >= 100) {
+      this.state = 'dying';
+      sound.play('death');
+      spawnParticles(this.x, this.y, 'bubble', 5);
+      return;
+    }
+
+    // Breeding timer
+    this.breedTimer -= dt;
+    if (this.breedTimer <= 0 && this.hunger < 70) {
+      // Spawn a new baby guppy!
+      const offsetX = (Math.random() - 0.5) * 30;
+      const offsetY = (Math.random() - 0.5) * 30;
+      guppies.push(new Guppy(this.x + offsetX, this.y + offsetY));
+      sound.play('evolve');
+      spawnParticles(this.x, this.y, 'sparkle', 8);
+      this.breedTimer = 20 + Math.random() * 10;
+    }
+
+    // Seek pellets when hungry
+    if (this.hunger > 50) {
+      this.state = 'hungry';
+      const nearestPellet = this.findNearestPellet();
+      if (nearestPellet) {
+        this.targetX = nearestPellet.x;
+        this.targetY = nearestPellet.y;
+      }
+    } else {
+      this.state = 'wandering';
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        const newPos = tankManager.getRandomPosition();
+        this.targetX = newPos.x;
+        this.targetY = newPos.y;
+        this.wanderTimer = 3 + Math.random() * 3;
+      }
+    }
+
+    // Movement
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 5) {
+      this.x += (dx / dist) * this.speed * dt;
+      this.y += (dy / dist) * this.speed * dt;
+      this.facingLeft = dx < 0;
+    }
+
+    const clamped = tankManager.clampToTank(this.x, this.y);
+    this.x = clamped.x;
+    this.y = clamped.y;
+
+    this.checkPelletCollision();
+  }
+
+  findNearestPellet() {
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const pellet of pellets) {
+      const dx = pellet.x - this.x;
+      const dy = pellet.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = pellet;
+      }
+    }
+    return nearest;
+  }
+
+  checkPelletCollision() {
+    for (let i = pellets.length - 1; i >= 0; i--) {
+      const pellet = pellets[i];
+      const dx = pellet.x - this.x;
+      const dy = pellet.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < this.size + pellet.size) {
+        pellets.splice(i, 1);
+        this.hunger = pellet.upgraded ? -25 : 0;
+        this.state = 'wandering';
+        break;
+      }
+    }
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.state === 'dying') {
+      ctx.rotate(Math.PI);
+      ctx.globalAlpha = Math.max(0, 1 - this.deathTimer / 3);
+    }
+
+    if (this.facingLeft) {
+      ctx.scale(-1, 1);
+    }
+
+    // Color based on state
+    let bodyColor = '#ff69b4'; // Pink
+    let bellyColor = '#ffb6c1'; // Light pink
+    if (this.state === 'dying') {
+      bodyColor = '#808080';
+      bellyColor = '#a0a0a0';
+    } else if (this.hunger > 75) {
+      bodyColor = '#ff0000';
+      bellyColor = '#ff6347';
+    } else if (this.hunger > 50) {
+      bodyColor = '#ff1493'; // Deep pink when hungry
+      bellyColor = '#ff69b4';
+    }
+
+    // Body - round, maternal shape
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size, this.size * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Belly (larger, pregnant look)
+    ctx.fillStyle = bellyColor;
+    ctx.beginPath();
+    ctx.ellipse(0, this.size * 0.15, this.size * 0.7, this.size * 0.4, 0, 0, Math.PI);
+    ctx.fill();
+
+    // Tail
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.moveTo(-this.size, 0);
+    ctx.lineTo(-this.size - 15, -12);
+    ctx.lineTo(-this.size - 15, 12);
+    ctx.closePath();
+    ctx.fill();
+
+    // Dorsal fin (small, cute)
+    ctx.beginPath();
+    ctx.moveTo(-5, -this.size * 0.6);
+    ctx.lineTo(5, -this.size * 0.85);
+    ctx.lineTo(15, -this.size * 0.6);
+    ctx.closePath();
+    ctx.fill();
+
+    // Eye
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(this.size * 0.4, -this.size * 0.2, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.arc(this.size * 0.45, -this.size * 0.2, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyelash (feminine touch)
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(this.size * 0.35, -this.size * 0.35);
+    ctx.lineTo(this.size * 0.3, -this.size * 0.45);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(this.size * 0.45, -this.size * 0.38);
+    ctx.lineTo(this.size * 0.45, -this.size * 0.5);
+    ctx.stroke();
+
+    // Heart on belly (if breeding soon)
+    if (this.breedTimer < 5 && this.state !== 'dying') {
+      ctx.fillStyle = '#ff0000';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('\u2665', 0, this.size * 0.3);
+    }
+
+    // Outline
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size, this.size * 0.7, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Label
+    ctx.fillStyle = '#ff69b4';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('BREEDER', this.x, this.y + this.size + 15);
+
+    // Breeding progress indicator
+    if (this.breedTimer < 10 && this.state !== 'dying') {
+      const progress = 1 - (this.breedTimer / 10);
+      ctx.fillStyle = `rgba(255, 105, 180, ${0.5 + progress * 0.5})`;
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('Ready!', this.x, this.y - this.size - 10);
+    }
+  }
+}
+
+// ============================================
 // Pellet Class
 // ============================================
 class Pellet {
@@ -1005,7 +1294,6 @@ class Coin {
     this.wobbleOffset = Math.random() * Math.PI * 2;
     this.wobbleSpeed = 3 + Math.random() * 2;
     this.age = 0;
-    this.maxAge = 10; // Disappear after 10 seconds
     this.collected = false;
   }
 
@@ -1021,11 +1309,7 @@ class Coin {
       const clamped = tankManager.clampToTank(this.x, this.y);
       this.x = clamped.x;
     }
-
-    // Mark as expired
-    if (this.age >= this.maxAge) {
-      this.collected = true; // Reuse flag for removal
-    }
+    // Coins no longer expire - they persist until collected
   }
 
   isClicked(clickX, clickY) {
@@ -1036,14 +1320,6 @@ class Coin {
 
   draw(ctx) {
     ctx.save();
-
-    // Flash when about to expire (last 3 seconds)
-    if (this.age > this.maxAge - 3) {
-      const flash = Math.sin(this.age * 10) > 0;
-      if (!flash) {
-        ctx.globalAlpha = 0.3;
-      }
-    }
 
     // Outer glow
     ctx.shadowColor = this.color;
@@ -1172,8 +1448,12 @@ class Sylvester {
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist < this.size * 0.5 + target.size) {
-        // Eat the fish!
-        target.state = 'dead';
+        // Eat the fish! Trigger death animation for visual feedback
+        target.state = 'dying';
+        target.deathTimer = 0;
+        sound.play('death');
+        spawnParticles(target.x, target.y, 'blood', 10);
+        spawnParticles(target.x, target.y, 'bubble', 5);
       }
     }
 
@@ -1218,6 +1498,18 @@ class Sylvester {
       if (dist < nearestDist) {
         nearestDist = dist;
         nearest = carnivore;
+      }
+    }
+
+    // Check breeders too
+    for (const breeder of breeders) {
+      if (breeder.state === 'dead' || breeder.state === 'dying') continue;
+      const dx = breeder.x - this.x;
+      const dy = breeder.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = breeder;
       }
     }
 
@@ -1544,9 +1836,13 @@ canvas.addEventListener('click', (e) => {
   // COMBAT MODE: If alien present, clicks damage alien instead of feeding
   if (alien && !alien.dead) {
     if (alien.isClicked(x, y)) {
-      alien.takeDamage();
+      // Laser upgrade deals 3 damage instead of 1
+      const damage = laserUpgraded ? 3 : 1;
+      for (let d = 0; d < damage; d++) {
+        alien.takeDamage();
+      }
       sound.play('hit');
-      spawnParticles(x, y, 'blood', 8);
+      spawnParticles(x, y, 'blood', laserUpgraded ? 15 : 8);
     }
     // Still allow coin collection during combat
     for (let i = coins.length - 1; i >= 0; i--) {
@@ -1647,6 +1943,34 @@ function updateStinkyButtonState() {
   }
 }
 
+function buyBreeder() {
+  if (gold >= BREEDER_COST) {
+    gold -= BREEDER_COST;
+    const pos = tankManager.getRandomPosition();
+    breeders.push(new Breeder(pos.x, pos.y));
+    sound.play('buy');
+    updateGoldDisplay();
+  }
+}
+
+function buyLaser() {
+  if (!laserUpgraded && gold >= LASER_COST) {
+    gold -= LASER_COST;
+    laserUpgraded = true;
+    sound.play('buy');
+    updateGoldDisplay();
+    updateLaserButtonState();
+  }
+}
+
+function updateLaserButtonState() {
+  const btn = document.getElementById('buyLaserBtn');
+  if (btn && laserUpgraded) {
+    btn.disabled = true;
+    btn.textContent = 'Laser Active!';
+  }
+}
+
 function toggleSound() {
   sound.enabled = !sound.enabled;
   const btn = document.getElementById('soundBtn');
@@ -1668,6 +1992,8 @@ window.buyGuppy = buyGuppy;
 window.upgradeFood = upgradeFood;
 window.buyCarnivore = buyCarnivore;
 window.buyStinky = buyStinky;
+window.buyBreeder = buyBreeder;
+window.buyLaser = buyLaser;
 window.toggleSound = toggleSound;
 window.saveGame = saveGame;
 window.newGame = newGame;
@@ -1746,6 +2072,17 @@ function gameLoop(timestamp) {
       carnivores.splice(i, 1);
     } else {
       carnivore.draw(ctx);
+    }
+  }
+
+  // Update and draw breeders
+  for (let i = breeders.length - 1; i >= 0; i--) {
+    const breeder = breeders[i];
+    breeder.update(dt);
+    if (breeder.state === 'dead') {
+      breeders.splice(i, 1);
+    } else {
+      breeder.draw(ctx);
     }
   }
 
