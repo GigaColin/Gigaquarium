@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gigaquarium</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #1a1a2e;
+      font-family: Arial, sans-serif;
+    }
+    #topBar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 800px;
+      padding: 10px 20px;
+      background: linear-gradient(180deg, #2a2a4e 0%, #1a1a2e 100%);
+      border: 2px solid #0f4c75;
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+    }
+    #goldDisplay {
+      color: #ffd700;
+      font-size: 24px;
+      font-weight: bold;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    }
+    #shop {
+      display: flex;
+      gap: 10px;
+    }
+    .shop-btn {
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: bold;
+      border: 2px solid #0f4c75;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .shop-btn:hover:not(:disabled) {
+      transform: scale(1.05);
+    }
+    .shop-btn:active:not(:disabled) {
+      transform: scale(0.95);
+    }
+    .shop-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #buyGuppyBtn {
+      background: linear-gradient(180deg, #ffa500 0%, #ff8c00 100%);
+      color: white;
+    }
+    #upgradeFoodBtn {
+      background: linear-gradient(180deg, #32cd32 0%, #228b22 100%);
+      color: white;
+    }
+    #buyCarnivoreBtn {
+      background: linear-gradient(180deg, #8b0000 0%, #4a0000 100%);
+      color: white;
+    }
+    #buyStinkyBtn {
+      background: linear-gradient(180deg, #daa520 0%, #8b6914 100%);
+      color: white;
+    }
+    #gameCanvas {
+      border: 4px solid #0f4c75;
+      border-radius: 0 0 8px 8px;
+      background: linear-gradient(180deg, #1e90ff 0%, #00008b 100%);
+    }
+    #bottomBar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 800px;
+      padding: 8px 20px;
+      margin-top: 10px;
+    }
+    #instructions {
+      color: #888;
+      font-size: 12px;
+    }
+    #controls {
+      display: flex;
+      gap: 8px;
+    }
+    .ctrl-btn {
+      padding: 5px 12px;
+      font-size: 12px;
+      background: #333;
+      color: #aaa;
+      border: 1px solid #555;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .ctrl-btn:hover {
+      background: #444;
+      color: #fff;
+    }
+    .ctrl-btn.active {
+      background: #0f4c75;
+      color: #fff;
+    }
+    #alienWarning {
+      display: none;
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(180deg, #8b0000 0%, #4a0000 100%);
+      color: #fff;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-weight: bold;
+      font-size: 14px;
+      animation: pulse 0.5s ease-in-out infinite alternate;
+      border: 2px solid #ff0000;
+      z-index: 100;
+    }
+    @keyframes pulse {
+      from { transform: translateX(-50%) scale(1); box-shadow: 0 0 10px #ff0000; }
+      to { transform: translateX(-50%) scale(1.05); box-shadow: 0 0 20px #ff0000; }
+    }
+  </style>
+</head>
+<body>
+  <div id="alienWarning">ALIEN ATTACK! Click to fight!</div>
+  <div id="topBar">
+    <div id="goldDisplay">Gold: <span id="goldAmount">100</span></div>
+    <div id="shop">
+      <button class="shop-btn" id="buyGuppyBtn" onclick="buyGuppy()">Guppy ($100)</button>
+      <button class="shop-btn" id="upgradeFoodBtn" onclick="upgradeFood()">Food+ ($200)</button>
+      <button class="shop-btn" id="buyStinkyBtn" onclick="buyStinky()">Stinky ($500)</button>
+      <button class="shop-btn" id="buyCarnivoreBtn" onclick="buyCarnivore()">Carnivore ($1000)</button>
+    </div>
+  </div>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div id="bottomBar">
+    <div id="instructions">
+      Click to feed ($5) | Collect coins | Auto-saves every 30s
+    </div>
+    <div id="controls">
+      <button class="ctrl-btn active" id="soundBtn" onclick="toggleSound()">Sound: ON</button>
+      <button class="ctrl-btn" onclick="saveGame()">Save</button>
+      <button class="ctrl-btn" onclick="newGame()">New Game</button>
+    </div>
+  </div>
+  <script type="module" src="/main.js"></script>
+</body>
+</html>

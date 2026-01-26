@@ -1,0 +1,14 @@
+{
+  "name": "gigaquarium",
+  "version": "1.0.0",
+  "description": "Insaniquarium-style fish tank game",
+  "type": "module",
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
