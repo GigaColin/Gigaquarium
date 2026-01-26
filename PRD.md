@@ -16,9 +16,33 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 | Guppy (S) | Pellets | None | Evolves to (M) after 3 feedings |
 | Guppy (M) | Pellets | Silver ($15) | Evolves to (L) after 5 more feedings |
 | Guppy (L) | Pellets | Gold ($35) | Evolves to King after 10 more feedings |
-| King Guppy | Pellets | Diamond ($200) | Final evolution stage |
+| King Guppy | Pellets | Diamond ($200) | Evolves to Star after 15 more feedings |
+| Star Guppy | Pellets | Star ($40) | Final evolution - stars float upward |
 | Carnivore | Small Guppies | Diamond ($200) | Eats living fish to survive, attacks aliens |
 | Breeder | Pellets | None | Slowly spawns small guppies over time |
+| Feeder | None | Pellets | Drops food every 15-20s, doesn't eat |
+| Starcatcher | Stars | Diamond ($200) | Bottom-dweller, mouth faces up |
+| Guppycruncher | Small Guppies | Beetle ($150) | Crab on tank bottom, jumps to catch fish |
+| Beetlemuncher | Beetles | Pearl ($500) | Tadpole-like, eats beetles from floor |
+| Ultravore | Carnivores | Chest ($2000) | Apex predator, slow but high value |
+
+### Pets
+| Pet | Cost | Ability |
+|-----|------|---------|
+| Stinky | $500+ | Snail that collects floor coins |
+| Niko | $600 | Produces pearls ($250) every 40s |
+| Zorf | $400 | Drops food pellets every 8s |
+| Itchy | $700 | Attacks aliens (2 dmg/sec) |
+| Clyde | $550 | Collects coins anywhere (not just floor) |
+| Angie | $2000 | Revives one dead fish per attack |
+
+### Aliens
+| Alien | HP | Behavior |
+|-------|-----|----------|
+| Sylvester | 50 | Eats fish one at a time |
+| Balrog | 100 | Never gets full, keeps eating |
+| Gus | N/A | Fed to death (20 pellets) |
+| Destructor | 75 | Fires homing missiles from bottom |
 
 ## Core Loop Task List
 
@@ -83,6 +107,58 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 - [x] Satiation Cap: Fish ignore pellets when hunger < 10 (prevents food waste)
 - [x] Multiple Stinkies: Allow purchasing additional Stinkies ($500 + $250 per owned)
 - [x] Feeder Fish ($1500): Slow orange fish that drops a pellet every 15-20 seconds; doesn't need to eat
+
+### Phase 10: Star Guppies & Starcatcher
+- [x] Star Guppy Evolution: King Guppies can evolve to "Star Guppy" after 15 more feedings
+- [x] Star Drops: Star Guppies drop Stars ($40) instead of Diamonds - stars float upward slowly
+- [x] Starcatcher ($1200): Purple bottom-dwelling fish that eats stars (mouth on top)
+- [x] Starcatcher Diamonds: Well-fed Starcatcher produces Diamonds ($200) every 12 seconds
+- [x] Visual: Stars have sparkle effect, Starcatcher has unique upward-facing design
+
+### Phase 11: Bottom-Dweller Food Chain
+- [ ] Guppycruncher ($800): Crab-like creature confined to tank bottom, jumps up to eat small guppies
+- [ ] Beetle Drops: Guppycruncher drops Beetles ($150) instead of diamonds
+- [ ] Beetles: New collectible that scuttles along tank bottom (doesn't sink like coins)
+- [ ] Beetlemuncher ($1000): Green tadpole-like fish that eats beetles
+- [ ] Pearl Drops: Beetlemuncher produces Pearls ($500) every 20 seconds when fed
+- [ ] Food Chain: Guppy → Guppycruncher → Beetle → Beetlemuncher → Pearl
+
+### Phase 12: Ultravore (Apex Predator)
+- [ ] Ultravore ($5000): Massive silver prehistoric fish - the ultimate predator
+- [ ] Diet: Eats Carnivores when hungry (not guppies)
+- [ ] Treasure Chest: Drops Treasure Chests ($2000) every 25 seconds
+- [ ] Vulnerability: Very slow, large target - aliens prioritize it
+- [ ] Risk/Reward: Highest income but expensive to replace and needs carnivore supply
+
+### Phase 13: Expanded Pet System
+- [ ] Niko ($600): Seahorse that produces pearls ($250) every 40 seconds passively
+- [ ] Zorf ($400): Alien pet that drops food pellets every 8 seconds (better than Feeder fish)
+- [ ] Itchy ($700): Swordfish that attacks aliens, dealing 2 damage per second when alien present
+- [ ] Clyde ($550): Jellyfish that floats around collecting coins anywhere (not just floor)
+- [ ] Angie ($2000): Angelic fish that can revive ONE dead fish per alien attack
+- [ ] Pet Limit: Maximum 3 pets active at once
+
+### Phase 14: New Aliens
+- [ ] Balrog: Tougher alien (100 HP), doesn't get full - keeps eating until killed
+- [ ] Gus: Cannot be shot - must be fed 20 pellets until he explodes (drops 10 gold coins)
+- [ ] Destructor: Sits at bottom, fires homing missiles at fish (missiles can be shot down, 3 HP each)
+- [ ] Alien Waves: After reaching $10,000 total earned, aliens spawn in pairs
+- [ ] Boss Warning: 5-second warning before alien spawns with audio cue
+
+### Phase 15: Quality of Life & Progression
+- [ ] Fish Counter UI: Show count of each fish type in corner
+- [ ] Auto-Collect Upgrade ($1000): Coins within radius of click are collected
+- [ ] Speed Toggle: 1x / 2x game speed button
+- [ ] Statistics Panel: Track total earned, fish lost, aliens defeated
+- [ ] Achievements: Unlock badges for milestones (first King Guppy, defeat 10 aliens, etc.)
+- [ ] Prestige System: Reset with permanent bonuses (start with more gold, faster fish, etc.)
+
+### Phase 16: Virtual Tank Mode
+- [ ] Sandbox Mode: Unlimited money, no aliens, just watch fish
+- [ ] Custom Tank: Change background color/theme
+- [ ] Fish Renaming: Click fish to give them names
+- [ ] Screenshot Mode: Hide UI and capture tank image
+- [ ] Ambient Mode: Fish swim slower, relaxing background music option
 
 ---
 
@@ -187,3 +263,18 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
   - Doesn't need to eat (no hunger system)
   - Visual indicator when about to drop food
 - Save/Load updated for stinky count and feeders
+
+**Iteration 11:** Phase 10 Complete - Star Guppies & Starcatcher:
+- Star Guppy Evolution: Added 'star' stage after king (15 feedings)
+  - Star guppies are bright yellow, larger than kings
+  - Drop stars ($40) that float upward instead of sinking
+- Star Collectible: New coin type with unique behavior
+  - Rendered as rotating 5-pointed star with sparkle effects
+  - Floats upward slowly, escapes off top of screen if not collected
+- Starcatcher ($1200): Purple bottom-dwelling fish
+  - Stays at tank bottom, moves horizontally only
+  - Mouth on top of body - catches stars floating up
+  - Produces diamonds ($200) every 12s when well-fed (hunger < 50)
+  - Unique visual design with upward-facing eyes
+- Added alien targeting for starcatchers
+- Save/Load updated for starcatchers

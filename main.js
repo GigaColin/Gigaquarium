@@ -68,11 +68,13 @@ const STINKY_COST = 500;
 const BREEDER_COST = 750;
 const LASER_COST = 300;
 const FEEDER_COST = 1500;
+const STARCATCHER_COST = 1200;
 
 let foodUpgraded = false;
 let laserUpgraded = false;
 const breeders = [];
 const feeders = [];
+const starcatchers = [];
 
 // Pet system - multiple stinkies allowed
 const stinkies = [];
@@ -347,6 +349,11 @@ function saveGame() {
       y: f.y,
       dropTimer: f.dropTimer
     })),
+    starcatchers: starcatchers.map(s => ({
+      x: s.x,
+      hunger: s.hunger,
+      coinTimer: s.coinTimer
+    })),
     timestamp: Date.now()
   };
 
@@ -427,6 +434,16 @@ function loadGame() {
       }
     }
 
+    // Restore starcatchers
+    if (saveData.starcatchers) {
+      for (const sData of saveData.starcatchers) {
+        const starcatcher = new Starcatcher(sData.x, 0);
+        starcatcher.hunger = Math.min(sData.hunger || 0, 50);
+        starcatcher.coinTimer = sData.coinTimer || 12;
+        starcatchers.push(starcatcher);
+      }
+    }
+
     console.log('Game loaded!');
     return true;
   } catch (e) {
@@ -464,6 +481,13 @@ const COIN_TYPES = {
     color: '#b9f2ff',
     size: 16,
     label: '$200'
+  },
+  star: {
+    value: 40,
+    color: '#ffff00',
+    size: 18,
+    label: '$40',
+    floatsUp: true  // Stars float upward instead of sinking
   }
 };
 
@@ -495,9 +519,16 @@ const STAGES = {
   king: {
     size: 40,
     color: '#ffd700',      // Gold
+    feedingsToNext: 15,
+    nextStage: 'star',
+    dropsCoin: 'diamond'
+  },
+  star: {
+    size: 45,
+    color: '#ffff00',      // Bright yellow
     feedingsToNext: Infinity,
     nextStage: null,
-    dropsCoin: 'diamond'
+    dropsCoin: 'star'
   }
 };
 
@@ -1458,6 +1489,257 @@ class Feeder {
 }
 
 // ============================================
+// Starcatcher Class (Bottom-dweller, eats stars)
+// ============================================
+class Starcatcher {
+  constructor(x, y) {
+    this.x = x;
+    this.y = tankManager.bounds.bottom - tankManager.padding - 20; // Stay near bottom
+    this.targetX = x;
+    this.speed = 35; // Slow moving
+    this.facingLeft = false;
+    this.size = 32;
+    this.hunger = 0;
+    this.state = 'wandering';
+
+    // Death animation
+    this.deathTimer = 0;
+
+    // Diamond production - drops diamond every 12 seconds when fed
+    this.coinTimer = 12;
+    this.canDropDiamond = false; // Only drops when fed (hunger < 50)
+
+    // Star eating
+    this.targetStar = null;
+
+    // Animation
+    this.wobble = 0;
+    this.mouthOpen = 0;
+  }
+
+  update(dt) {
+    this.wobble += dt * 2;
+
+    // Handle dying state
+    if (this.state === 'dying') {
+      this.deathTimer += dt;
+      this.y -= 20 * dt;
+      if (this.y < tankManager.padding || this.deathTimer > 3) {
+        this.state = 'dead';
+      }
+      return;
+    }
+
+    // Hunger increases slowly
+    this.hunger += dt * 3;
+
+    if (this.hunger >= 100) {
+      this.state = 'dying';
+      sound.play('death');
+      spawnParticles(this.x, this.y, 'bubble', 5);
+      return;
+    }
+
+    // Diamond production when well-fed
+    if (this.hunger < 50) {
+      this.canDropDiamond = true;
+      this.coinTimer -= dt;
+      if (this.coinTimer <= 0) {
+        // Throw diamond upward (unique to Starcatcher)
+        const diamond = new Coin(this.x, this.y - this.size, 'diamond');
+        diamond.fallSpeed = -60; // Throw upward initially
+        coins.push(diamond);
+        spawnParticles(this.x, this.y, 'sparkle', 5);
+        this.coinTimer = 12;
+      }
+    } else {
+      this.canDropDiamond = false;
+    }
+
+    // Look for stars to eat
+    this.targetStar = this.findNearestStar();
+    if (this.targetStar) {
+      this.state = 'hunting';
+      this.targetX = this.targetStar.x;
+      this.mouthOpen = Math.min(1, this.mouthOpen + dt * 3);
+    } else {
+      this.state = this.hunger > 50 ? 'hungry' : 'wandering';
+      this.mouthOpen = Math.max(0, this.mouthOpen - dt * 2);
+
+      // Wander along the bottom
+      if (Math.abs(this.x - this.targetX) < 10) {
+        this.targetX = tankManager.padding + Math.random() * (tankManager.bounds.right - tankManager.padding * 2);
+      }
+    }
+
+    // Movement (only horizontal, stays at bottom)
+    const dx = this.targetX - this.x;
+    if (Math.abs(dx) > 5) {
+      const currentSpeed = this.state === 'hunting' ? this.speed * 1.5 : this.speed;
+      this.x += Math.sign(dx) * currentSpeed * dt;
+      this.facingLeft = dx < 0;
+    }
+
+    // Clamp to bottom area
+    this.x = Math.max(tankManager.padding, Math.min(tankManager.bounds.right - tankManager.padding, this.x));
+
+    this.checkStarCollision();
+  }
+
+  findNearestStar() {
+    let nearest = null;
+    let nearestDist = Infinity;
+
+    for (const coin of coins) {
+      if (coin.type !== 'star') continue;
+      if (coin.collected || coin.escaped) continue;
+
+      const dx = coin.x - this.x;
+      const dy = coin.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      // Only chase stars that are above and within reasonable range
+      if (dy < 0 && dist < nearestDist && dist < 200) {
+        nearestDist = dist;
+        nearest = coin;
+      }
+    }
+    return nearest;
+  }
+
+  checkStarCollision() {
+    for (const coin of coins) {
+      if (coin.type !== 'star') continue;
+      if (coin.collected || coin.escaped) continue;
+
+      const dx = coin.x - this.x;
+      const dy = coin.y - (this.y - this.size * 0.3); // Mouth is on top
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < this.size * 0.8) {
+        // Eat the star!
+        coin.collected = true;
+        this.hunger = Math.max(0, this.hunger - 40);
+        this.state = 'wandering';
+        sound.play('coin');
+        spawnParticles(this.x, this.y - this.size * 0.3, 'sparkle', 8);
+      }
+    }
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.state === 'dying') {
+      ctx.rotate(Math.PI);
+      ctx.globalAlpha = Math.max(0, 1 - this.deathTimer / 3);
+    }
+
+    // Wobble animation
+    const wobbleY = Math.sin(this.wobble) * 2;
+    ctx.translate(0, wobbleY);
+
+    // Body color - purple/periwinkle
+    let bodyColor = '#9370db'; // Medium purple
+    let bellyColor = '#dda0dd'; // Plum
+    if (this.state === 'dying') {
+      bodyColor = '#808080';
+      bellyColor = '#a0a0a0';
+    } else if (this.hunger > 75) {
+      bodyColor = '#8b008b'; // Dark magenta when hungry
+      bellyColor = '#da70d6';
+    } else if (this.hunger > 50) {
+      bodyColor = '#9932cc'; // Dark orchid
+      bellyColor = '#da70d6';
+    }
+
+    // Body - round, bottom-heavy shape
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size, this.size * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Belly (lighter underside)
+    ctx.fillStyle = bellyColor;
+    ctx.beginPath();
+    ctx.ellipse(0, this.size * 0.15, this.size * 0.7, this.size * 0.25, 0, 0, Math.PI);
+    ctx.fill();
+
+    // Mouth on TOP (unique feature - opens upward)
+    const mouthSize = 8 + this.mouthOpen * 8;
+    ctx.fillStyle = '#4b0082'; // Indigo
+    ctx.beginPath();
+    ctx.ellipse(0, -this.size * 0.3, mouthSize, mouthSize * (0.3 + this.mouthOpen * 0.7), 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner mouth
+    if (this.mouthOpen > 0.3) {
+      ctx.fillStyle = '#2e0854';
+      ctx.beginPath();
+      ctx.ellipse(0, -this.size * 0.3, mouthSize * 0.6, mouthSize * 0.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Side fins
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.ellipse(-this.size * 0.8, 0, 10, 6, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(this.size * 0.8, 0, 10, 6, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes (on sides, looking up)
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(-this.size * 0.4, -this.size * 0.1, 7, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(this.size * 0.4, -this.size * 0.1, 7, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pupils (looking up toward stars)
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(-this.size * 0.4, -this.size * 0.2, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(this.size * 0.4, -this.size * 0.2, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Outline
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size, this.size * 0.5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Label
+    ctx.fillStyle = '#9370db';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('STARCATCHER', this.x, this.y + this.size * 0.6 + 12);
+
+    // Hunger warning
+    if (this.hunger > 60 && this.state !== 'dying') {
+      ctx.fillStyle = this.hunger > 80 ? '#ff0000' : '#ffaa00';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('HUNGRY!', this.x, this.y - this.size * 0.6 - 15);
+    }
+
+    // Diamond ready indicator
+    if (this.canDropDiamond && this.coinTimer < 3) {
+      ctx.fillStyle = '#b9f2ff';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('\u2666', this.x, this.y - this.size * 0.6 - 5);
+    }
+  }
+}
+
+// ============================================
 // Pellet Class
 // ============================================
 class Pellet {
@@ -1505,27 +1787,44 @@ class Coin {
     this.color = config.color;
     this.size = config.size;
     this.label = config.label;
+    this.floatsUp = config.floatsUp || false;
 
     this.fallSpeed = 30;
     this.wobbleOffset = Math.random() * Math.PI * 2;
     this.wobbleSpeed = 3 + Math.random() * 2;
     this.age = 0;
     this.collected = false;
+    this.escaped = false; // For stars that float off screen
   }
 
   update(dt) {
     this.age += dt;
 
-    // Sink slowly with wobble
-    if (this.y < tankManager.bounds.bottom - tankManager.padding) {
-      this.y += this.fallSpeed * dt;
-      this.x += Math.sin(this.age * this.wobbleSpeed + this.wobbleOffset) * 20 * dt;
+    if (this.floatsUp) {
+      // Stars float upward slowly
+      if (this.y > tankManager.padding) {
+        this.y -= this.fallSpeed * 0.8 * dt; // Slightly slower than falling
+        this.x += Math.sin(this.age * this.wobbleSpeed + this.wobbleOffset) * 15 * dt;
 
-      // Keep within horizontal bounds
-      const clamped = tankManager.clampToTank(this.x, this.y);
-      this.x = clamped.x;
+        // Keep within horizontal bounds
+        const clamped = tankManager.clampToTank(this.x, this.y);
+        this.x = clamped.x;
+      } else {
+        // Star escaped off top of screen
+        this.escaped = true;
+      }
+    } else {
+      // Sink slowly with wobble
+      if (this.y < tankManager.bounds.bottom - tankManager.padding) {
+        this.y += this.fallSpeed * dt;
+        this.x += Math.sin(this.age * this.wobbleSpeed + this.wobbleOffset) * 20 * dt;
+
+        // Keep within horizontal bounds
+        const clamped = tankManager.clampToTank(this.x, this.y);
+        this.x = clamped.x;
+      }
     }
-    // Coins no longer expire - they persist until collected
+    // Coins no longer expire - they persist until collected (or escape for stars)
   }
 
   isClicked(clickX, clickY) {
@@ -1539,39 +1838,80 @@ class Coin {
 
     // Outer glow
     ctx.shadowColor = this.color;
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = this.type === 'star' ? 15 : 10;
 
-    // Coin body
-    ctx.fillStyle = this.color;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-    ctx.fill();
+    if (this.type === 'star') {
+      // Draw 5-pointed star shape
+      const spikes = 5;
+      const outerRadius = this.size;
+      const innerRadius = this.size * 0.5;
+      const rotation = Math.PI / 2 + this.age * 2; // Rotate over time
 
-    // Inner shine
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.beginPath();
-    ctx.arc(this.x - this.size * 0.3, this.y - this.size * 0.3, this.size * 0.4, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Diamond shape for diamond coins
-    if (this.type === 'diamond') {
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = this.color;
       ctx.beginPath();
-      ctx.moveTo(this.x, this.y - this.size * 0.5);
-      ctx.lineTo(this.x + this.size * 0.4, this.y);
-      ctx.lineTo(this.x, this.y + this.size * 0.5);
-      ctx.lineTo(this.x - this.size * 0.4, this.y);
+      for (let i = 0; i < spikes * 2; i++) {
+        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+        const angle = (i * Math.PI / spikes) - rotation;
+        const px = this.x + Math.cos(angle) * radius;
+        const py = this.y + Math.sin(angle) * radius;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
       ctx.closePath();
       ctx.fill();
-    }
 
-    // $ symbol for silver/gold
-    if (this.type !== 'diamond') {
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.font = `bold ${this.size}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('$', this.x, this.y);
+      // Inner sparkle
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Sparkle particles around star
+      if (Math.random() < 0.3) {
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        const sparkleAngle = Math.random() * Math.PI * 2;
+        const sparkleDist = this.size * (0.8 + Math.random() * 0.5);
+        ctx.beginPath();
+        ctx.arc(
+          this.x + Math.cos(sparkleAngle) * sparkleDist,
+          this.y + Math.sin(sparkleAngle) * sparkleDist,
+          2, 0, Math.PI * 2
+        );
+        ctx.fill();
+      }
+    } else {
+      // Coin body (circle for regular coins)
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Inner shine
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.beginPath();
+      ctx.arc(this.x - this.size * 0.3, this.y - this.size * 0.3, this.size * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Diamond shape for diamond coins
+      if (this.type === 'diamond') {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.size * 0.5);
+        ctx.lineTo(this.x + this.size * 0.4, this.y);
+        ctx.lineTo(this.x, this.y + this.size * 0.5);
+        ctx.lineTo(this.x - this.size * 0.4, this.y);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // $ symbol for silver/gold
+      if (this.type === 'silver' || this.type === 'gold') {
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.font = `bold ${this.size}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('$', this.x, this.y);
+      }
     }
 
     ctx.restore();
@@ -1740,6 +2080,18 @@ class Sylvester {
       if (dist < nearestDist) {
         nearestDist = dist;
         nearest = breeder;
+      }
+    }
+
+    // Check starcatchers too
+    for (const starcatcher of starcatchers) {
+      if (starcatcher.state === 'dead' || starcatcher.state === 'dying') continue;
+      const dx = starcatcher.x - this.x;
+      const dy = starcatcher.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = starcatcher;
       }
     }
 
@@ -2213,6 +2565,16 @@ function buyFeeder() {
   }
 }
 
+function buyStarcatcher() {
+  if (gold >= STARCATCHER_COST) {
+    gold -= STARCATCHER_COST;
+    const pos = tankManager.getRandomPosition();
+    starcatchers.push(new Starcatcher(pos.x, pos.y));
+    sound.play('buy');
+    updateGoldDisplay();
+  }
+}
+
 function updateLaserButtonState() {
   const btn = document.getElementById('buyLaserBtn');
   if (btn && laserUpgraded) {
@@ -2245,6 +2607,7 @@ window.buyStinky = buyStinky;
 window.buyBreeder = buyBreeder;
 window.buyLaser = buyLaser;
 window.buyFeeder = buyFeeder;
+window.buyStarcatcher = buyStarcatcher;
 window.toggleSound = toggleSound;
 window.saveGame = saveGame;
 window.newGame = newGame;
@@ -2297,7 +2660,7 @@ function gameLoop(timestamp) {
   for (let i = coins.length - 1; i >= 0; i--) {
     const coin = coins[i];
     coin.update(dt);
-    if (coin.collected) {
+    if (coin.collected || coin.escaped) {
       coins.splice(i, 1);
     } else {
       coin.draw(ctx);
@@ -2341,6 +2704,17 @@ function gameLoop(timestamp) {
   for (const feeder of feeders) {
     feeder.update(dt);
     feeder.draw(ctx);
+  }
+
+  // Update and draw starcatchers
+  for (let i = starcatchers.length - 1; i >= 0; i--) {
+    const starcatcher = starcatchers[i];
+    starcatcher.update(dt);
+    if (starcatcher.state === 'dead') {
+      starcatchers.splice(i, 1);
+    } else {
+      starcatcher.draw(ctx);
+    }
   }
 
   // Update and draw Stinkies (pets)
