@@ -69,12 +69,21 @@ const BREEDER_COST = 750;
 const LASER_COST = 300;
 const FEEDER_COST = 1500;
 const STARCATCHER_COST = 1200;
+const GUPPYCRUNCHER_COST = 800;
+const BEETLEMUNCHER_COST = 1000;
+const ULTRAVORE_COST = 5000;
+const BEETLE_VALUE = 150;
+const PEARL_VALUE = 500;
 
 let foodUpgraded = false;
 let laserUpgraded = false;
 const breeders = [];
 const feeders = [];
 const starcatchers = [];
+const guppycrunchers = [];
+const beetlemunchers = [];
+const beetles = [];
+const ultravores = [];
 
 // Pet system - multiple stinkies allowed
 const stinkies = [];
@@ -354,6 +363,23 @@ function saveGame() {
       hunger: s.hunger,
       coinTimer: s.coinTimer
     })),
+    guppycrunchers: guppycrunchers.map(gc => ({
+      x: gc.x,
+      hunger: gc.hunger,
+      coinTimer: gc.coinTimer
+    })),
+    beetlemunchers: beetlemunchers.map(bm => ({
+      x: bm.x,
+      y: bm.y,
+      hunger: bm.hunger,
+      coinTimer: bm.coinTimer
+    })),
+    ultravores: ultravores.map(uv => ({
+      x: uv.x,
+      y: uv.y,
+      hunger: uv.hunger,
+      coinTimer: uv.coinTimer
+    })),
     timestamp: Date.now()
   };
 
@@ -444,6 +470,37 @@ function loadGame() {
       }
     }
 
+    // Restore guppycrunchers
+    if (saveData.guppycrunchers) {
+      for (const gcData of saveData.guppycrunchers) {
+        const gc = new Guppycruncher();
+        gc.x = gcData.x;
+        gc.hunger = Math.min(gcData.hunger || 0, 50);
+        gc.coinTimer = gcData.coinTimer || 15;
+        guppycrunchers.push(gc);
+      }
+    }
+
+    // Restore beetlemunchers
+    if (saveData.beetlemunchers) {
+      for (const bmData of saveData.beetlemunchers) {
+        const bm = new Beetlemuncher(bmData.x, bmData.y);
+        bm.hunger = Math.min(bmData.hunger || 0, 50);
+        bm.coinTimer = bmData.coinTimer || 20;
+        beetlemunchers.push(bm);
+      }
+    }
+
+    // Restore ultravores
+    if (saveData.ultravores) {
+      for (const uvData of saveData.ultravores) {
+        const uv = new Ultravore(uvData.x, uvData.y);
+        uv.hunger = Math.min(uvData.hunger || 0, 50);
+        uv.coinTimer = uvData.coinTimer || 25;
+        ultravores.push(uv);
+      }
+    }
+
     console.log('Game loaded!');
     return true;
   } catch (e) {
@@ -488,6 +545,18 @@ const COIN_TYPES = {
     size: 18,
     label: '$40',
     floatsUp: true  // Stars float upward instead of sinking
+  },
+  pearl: {
+    value: 500,
+    color: '#faf0e6',  // Creamy white
+    size: 14,
+    label: '$500'
+  },
+  treasure: {
+    value: 2000,
+    color: '#8b4513',  // Saddle brown
+    size: 20,
+    label: '$2000'
   }
 };
 
@@ -1100,6 +1169,285 @@ class Carnivore {
       ctx.font = 'bold 10px Arial';
       ctx.fillText('DANGER!', this.x, barY - 3);
     }
+  }
+}
+
+// ============================================
+// Ultravore Class (Apex Predator)
+// ============================================
+class Ultravore {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.targetX = x;
+    this.targetY = y;
+    this.speed = 50; // Slow - largest fish
+    this.hunger = 0;
+    this.state = 'wandering';
+    this.facingLeft = false;
+    this.wanderTimer = 0;
+    this.size = 60; // Massive - larger than all other fish
+
+    // Death animation
+    this.deathTimer = 0;
+
+    // Treasure dropping - chests every 25 seconds
+    this.coinTimer = 25;
+
+    // Hunting
+    this.targetFish = null;
+
+    // Alien attack timer
+    this.attackTimer = 0;
+    this.attackCooldown = 0.5;
+
+    // Resilience - takes 3 seconds for alien to kill (larger fish)
+    this.beingEatenTimer = 0;
+    this.beingEatenDuration = 3;
+  }
+
+  update(dt) {
+    // Handle dying state
+    if (this.state === 'dying') {
+      this.deathTimer += dt;
+      this.y -= 30 * dt;
+      if (this.y < tankManager.padding || this.deathTimer > 3) {
+        this.state = 'dead';
+      }
+      return;
+    }
+
+    // Hunger increases slower than guppies (apex predator)
+    this.hunger += dt * 2;
+
+    if (this.hunger >= 100) {
+      this.state = 'dying';
+      sound.play('death');
+      spawnParticles(this.x, this.y, 'bubble', 12);
+      return;
+    }
+
+    // Coin drop timer (drops treasures when alive)
+    this.coinTimer -= dt;
+    if (this.coinTimer <= 0) {
+      coins.push(new Coin(this.x, this.y, 'treasure'));
+      this.coinTimer = 25;
+    }
+
+    // Reset being eaten timer if alien is gone or far away
+    if (!alien || alien.dead) {
+      this.beingEatenTimer = 0;
+    } else {
+      const alienDx = alien.x - this.x;
+      const alienDy = alien.y - this.y;
+      const alienDist = Math.sqrt(alienDx * alienDx + alienDy * alienDy);
+      if (alienDist > this.size + alien.size) {
+        this.beingEatenTimer = Math.max(0, this.beingEatenTimer - dt * 1.5);
+      }
+    }
+
+    // PRIORITY 1: Attack alien if present!
+    if (alien && !alien.dead && !alien.entering) {
+      this.state = 'attacking';
+      this.targetX = alien.x;
+      this.targetY = alien.y;
+      this.targetFish = null;
+
+      // Check if close enough to attack
+      const dx = alien.x - this.x;
+      const dy = alien.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < this.size + alien.size * 0.5) {
+        // Attack the alien!
+        this.attackTimer -= dt;
+        if (this.attackTimer <= 0) {
+          alien.takeDamage();
+          spawnParticles(alien.x, alien.y, 'blood', 5);
+          this.attackTimer = this.attackCooldown;
+        }
+      }
+    }
+    // PRIORITY 2: Hunt carnivores when hungry (no alien present)
+    else if (this.hunger > 40) {
+      this.state = 'hunting';
+      this.targetFish = this.findCarnivore();
+
+      if (this.targetFish) {
+        this.targetX = this.targetFish.x;
+        this.targetY = this.targetFish.y;
+
+        // Check if caught prey
+        const dx = this.targetFish.x - this.x;
+        const dy = this.targetFish.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < this.size * 0.5 + this.targetFish.size) {
+          // Eat the carnivore!
+          this.targetFish.state = 'dead';
+          this.hunger = 0;
+          this.state = 'wandering';
+          this.targetFish = null;
+        }
+      } else {
+        // No prey available, just wander hungrily
+        this.state = 'hungry';
+      }
+    } else {
+      this.state = 'wandering';
+      this.targetFish = null;
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        const newPos = tankManager.getRandomPosition();
+        this.targetX = newPos.x;
+        this.targetY = newPos.y;
+        this.wanderTimer = 2 + Math.random() * 2;
+      }
+    }
+
+    // Movement (slowest fish)
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 5) {
+      const currentSpeed = (this.state === 'hunting' || this.state === 'attacking') ? this.speed * 1.3 : this.speed;
+      this.x += (dx / dist) * currentSpeed * dt;
+      this.y += (dy / dist) * currentSpeed * dt;
+      this.facingLeft = dx < 0;
+    }
+
+    const clamped = tankManager.clampToTank(this.x, this.y);
+    this.x = clamped.x;
+    this.y = clamped.y;
+  }
+
+  findCarnivore() {
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const carnivore of carnivores) {
+      if (carnivore.state === 'dead' || carnivore.state === 'dying') continue;
+
+      const dx = carnivore.x - this.x;
+      const dy = carnivore.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = carnivore;
+      }
+    }
+    return nearest;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.state === 'dying') {
+      ctx.rotate(Math.PI);
+      ctx.globalAlpha = Math.max(0, 1 - this.deathTimer / 3);
+    }
+
+    if (this.facingLeft) {
+      ctx.scale(-1, 1);
+    }
+
+    // Color based on state
+    let bodyColor = '#708090'; // Slate gray (prehistoric)
+    let bellyColor = '#a9a9a9'; // Light gray
+    if (this.state === 'dying') {
+      bodyColor = '#505050';
+      bellyColor = '#808080';
+    } else if (this.state === 'attacking') {
+      bodyColor = '#4169e1'; // Royal blue when attacking alien
+      bellyColor = '#87ceeb';
+    } else if (this.state === 'hunting') {
+      bodyColor = '#2f4f4f'; // Dark slate gray when hunting
+      bellyColor = '#708090';
+    } else if (this.hunger > 60) {
+      bodyColor = '#556b2f'; // Darker when hungry
+      bellyColor = '#696969';
+    }
+
+    // Body - massive, prehistoric shape
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size, this.size * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Belly - lighter shade
+    ctx.fillStyle = bellyColor;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size * 0.85, this.size * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Head/Snout - pointed and menacing
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.moveTo(this.size * 0.8, 0);
+    ctx.lineTo(this.size, -this.size * 0.2);
+    ctx.lineTo(this.size, this.size * 0.2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Eyes - cold and ancient
+    ctx.fillStyle = '#ffff00';
+    ctx.beginPath();
+    ctx.arc(this.size * 0.3, -this.size * 0.15, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.arc(this.size * 0.3, -this.size * 0.15, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Dorsal fin - massive and jagged
+    ctx.fillStyle = '#556b2f';
+    ctx.beginPath();
+    ctx.moveTo(-this.size * 0.2, -this.size * 0.45);
+    ctx.lineTo(-this.size * 0.1, -this.size * 0.75);
+    ctx.lineTo(this.size * 0.1, -this.size * 0.45);
+    ctx.closePath();
+    ctx.fill();
+
+    // Tail - large and powerful
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.moveTo(-this.size * 0.8, 0);
+    ctx.lineTo(-this.size * 1.3, -this.size * 0.25);
+    ctx.lineTo(-this.size * 1.3, this.size * 0.25);
+    ctx.closePath();
+    ctx.fill();
+
+    // Tail shine
+    ctx.fillStyle = bellyColor;
+    ctx.beginPath();
+    ctx.moveTo(-this.size * 0.9, 0);
+    ctx.lineTo(-this.size * 1.2, -this.size * 0.15);
+    ctx.lineTo(-this.size * 1.2, this.size * 0.15);
+    ctx.closePath();
+    ctx.fill();
+
+    // Danger indicator when hunting
+    if (this.state === 'hunting' && this.hunger > 60) {
+      ctx.strokeStyle = '#8b0000';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size + 8, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Danger bar when being eaten
+    if (this.beingEatenTimer > 0) {
+      const dangerPercent = this.beingEatenTimer / this.beingEatenDuration;
+      ctx.fillStyle = '#ff0000';
+      ctx.fillRect(-this.size * 0.5, -this.size * 0.65, this.size * dangerPercent, 4);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-this.size * 0.5, -this.size * 0.65, this.size, 4);
+    }
+
+    ctx.restore();
   }
 }
 
@@ -1740,6 +2088,747 @@ class Starcatcher {
 }
 
 // ============================================
+// Beetle Class (Collectible that scuttles along bottom)
+// ============================================
+class Beetle {
+  constructor(x, y) {
+    this.x = x;
+    this.y = tankManager.bounds.bottom - tankManager.padding; // Stay at bottom
+    this.targetX = x;
+    this.speed = 45;
+    this.size = 12;
+    this.collected = false;
+    this.facingLeft = false;
+
+    // Animation
+    this.legPhase = 0;
+    this.wobble = Math.random() * Math.PI * 2;
+  }
+
+  update(dt) {
+    this.legPhase += dt * 15;
+    this.wobble += dt * 2;
+
+    // Wander along the bottom
+    if (Math.abs(this.x - this.targetX) < 10) {
+      this.targetX = tankManager.padding + Math.random() * (tankManager.bounds.right - tankManager.padding * 2);
+    }
+
+    // Movement (only horizontal)
+    const dx = this.targetX - this.x;
+    if (Math.abs(dx) > 2) {
+      this.x += Math.sign(dx) * this.speed * dt;
+      this.facingLeft = dx < 0;
+    }
+
+    // Clamp to bottom bounds
+    this.x = Math.max(tankManager.padding, Math.min(tankManager.bounds.right - tankManager.padding, this.x));
+  }
+
+  isClicked(clickX, clickY) {
+    const dx = clickX - this.x;
+    const dy = clickY - this.y;
+    return Math.sqrt(dx * dx + dy * dy) < this.size + 15; // Generous click area
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.facingLeft) {
+      ctx.scale(-1, 1);
+    }
+
+    // Shiny shell - dark brown/black
+    const shellColor = '#3d2b1f';
+    const shellHighlight = '#5c4033';
+
+    // Shell body
+    ctx.fillStyle = shellColor;
+    ctx.beginPath();
+    ctx.ellipse(0, -this.size * 0.3, this.size, this.size * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Shell shine
+    ctx.fillStyle = shellHighlight;
+    ctx.beginPath();
+    ctx.ellipse(-this.size * 0.2, -this.size * 0.5, this.size * 0.4, this.size * 0.2, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Shell segments (lines)
+    ctx.strokeStyle = '#2a1f14';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -this.size * 0.7);
+    ctx.lineTo(0, this.size * 0.1);
+    ctx.stroke();
+
+    // Legs (6 total, animated)
+    ctx.strokeStyle = '#4a3728';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      const legOffset = (i - 1) * this.size * 0.5;
+      const legWiggle = Math.sin(this.legPhase + i * 1.5) * 3;
+
+      // Left leg
+      ctx.beginPath();
+      ctx.moveTo(legOffset, -this.size * 0.1);
+      ctx.lineTo(legOffset - 8 - legWiggle, this.size * 0.3);
+      ctx.stroke();
+
+      // Right leg
+      ctx.beginPath();
+      ctx.moveTo(legOffset, -this.size * 0.1);
+      ctx.lineTo(legOffset + 8 + legWiggle, this.size * 0.3);
+      ctx.stroke();
+    }
+
+    // Antennae
+    ctx.strokeStyle = '#4a3728';
+    ctx.lineWidth = 1.5;
+    const antennaWiggle = Math.sin(this.wobble) * 2;
+    ctx.beginPath();
+    ctx.moveTo(this.size * 0.6, -this.size * 0.3);
+    ctx.quadraticCurveTo(this.size * 0.9, -this.size * 0.8 + antennaWiggle, this.size * 0.7, -this.size);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(this.size * 0.8, -this.size * 0.3);
+    ctx.quadraticCurveTo(this.size * 1.1, -this.size * 0.7 + antennaWiggle, this.size * 1.0, -this.size * 0.9);
+    ctx.stroke();
+
+    // Eyes (small)
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(this.size * 0.5, -this.size * 0.4, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // Value label
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 9px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('$150', this.x, this.y + 15);
+  }
+}
+
+// ============================================
+// Guppycruncher Class (Crab that eats small guppies)
+// ============================================
+class Guppycruncher {
+  constructor() {
+    this.x = tankManager.padding + Math.random() * (tankManager.bounds.right - tankManager.padding * 2);
+    this.y = tankManager.bounds.bottom - tankManager.padding;
+    this.groundY = this.y; // Remember ground level
+    this.targetX = this.x;
+    this.speed = 50;
+    this.size = 35;
+    this.hunger = 0;
+    this.state = 'wandering';
+    this.facingLeft = false;
+
+    // Death animation
+    this.deathTimer = 0;
+
+    // Beetle production - drops beetle every 15 seconds when fed
+    this.coinTimer = 15;
+
+    // Jumping mechanics
+    this.vy = 0; // Vertical velocity
+    this.isJumping = false;
+    this.targetFish = null;
+
+    // Animation
+    this.legPhase = 0;
+    this.clawOpen = 0;
+  }
+
+  update(dt) {
+    this.legPhase += dt * 8;
+
+    // Handle dying state
+    if (this.state === 'dying') {
+      this.deathTimer += dt;
+      this.y -= 20 * dt;
+      if (this.y < tankManager.padding || this.deathTimer > 3) {
+        this.state = 'dead';
+      }
+      return;
+    }
+
+    // Hunger increases
+    this.hunger += dt * 4;
+
+    if (this.hunger >= 100) {
+      this.state = 'dying';
+      sound.play('death');
+      spawnParticles(this.x, this.y, 'bubble', 5);
+      return;
+    }
+
+    // Beetle production when well-fed
+    if (this.hunger < 50) {
+      this.coinTimer -= dt;
+      if (this.coinTimer <= 0) {
+        beetles.push(new Beetle(this.x, this.y));
+        spawnParticles(this.x, this.y, 'sparkle', 3);
+        this.coinTimer = 15;
+      }
+    }
+
+    // Apply gravity if jumping
+    if (this.isJumping) {
+      this.vy += 400 * dt; // Gravity
+      this.y += this.vy * dt;
+
+      // Check if landed
+      if (this.y >= this.groundY) {
+        this.y = this.groundY;
+        this.vy = 0;
+        this.isJumping = false;
+      }
+    }
+
+    // Hunt small guppies when hungry
+    if (this.hunger > 40 && !this.isJumping) {
+      this.targetFish = this.findSmallGuppy();
+      if (this.targetFish) {
+        this.state = 'hunting';
+        this.targetX = this.targetFish.x;
+        this.clawOpen = Math.min(1, this.clawOpen + dt * 3);
+
+        // Jump to catch if guppy is above and close horizontally
+        const dx = this.targetFish.x - this.x;
+        const dy = this.targetFish.y - this.y;
+        if (Math.abs(dx) < 60 && dy < -30 && dy > -150) {
+          // Jump!
+          this.isJumping = true;
+          this.vy = -250 - Math.abs(dy) * 0.8; // Jump higher for higher fish
+          spawnParticles(this.x, this.y, 'bubble', 3);
+        }
+
+        // Check if caught prey
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < this.size * 0.6 + this.targetFish.size) {
+          // Eat the fish!
+          this.targetFish.state = 'dead';
+          this.hunger = 0;
+          this.state = 'wandering';
+          this.targetFish = null;
+          sound.play('coin'); // Crunch sound
+          spawnParticles(this.x, this.y, 'blood', 5);
+        }
+      } else {
+        this.state = 'hungry';
+        this.clawOpen = Math.max(0, this.clawOpen - dt * 2);
+      }
+    } else {
+      this.state = this.hunger > 50 ? 'hungry' : 'wandering';
+      this.targetFish = null;
+      this.clawOpen = Math.max(0, this.clawOpen - dt * 2);
+
+      // Wander along the bottom
+      if (!this.isJumping && Math.abs(this.x - this.targetX) < 10) {
+        this.targetX = tankManager.padding + Math.random() * (tankManager.bounds.right - tankManager.padding * 2);
+      }
+    }
+
+    // Horizontal movement (only when on ground)
+    if (!this.isJumping) {
+      const dx = this.targetX - this.x;
+      if (Math.abs(dx) > 5) {
+        const currentSpeed = this.state === 'hunting' ? this.speed * 1.5 : this.speed;
+        this.x += Math.sign(dx) * currentSpeed * dt;
+        this.facingLeft = dx < 0;
+      }
+    }
+
+    // Clamp to bounds
+    this.x = Math.max(tankManager.padding, Math.min(tankManager.bounds.right - tankManager.padding, this.x));
+  }
+
+  findSmallGuppy() {
+    let nearest = null;
+    let nearestDist = Infinity;
+
+    for (const guppy of guppies) {
+      if (guppy.stage !== 'small') continue;
+      if (guppy.state === 'dead' || guppy.state === 'dying') continue;
+
+      const dx = guppy.x - this.x;
+      const dy = guppy.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      // Only target guppies above and within range
+      if (dy < 0 && dist < nearestDist && dist < 200) {
+        nearestDist = dist;
+        nearest = guppy;
+      }
+    }
+    return nearest;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.state === 'dying') {
+      ctx.rotate(Math.PI);
+      ctx.globalAlpha = Math.max(0, 1 - this.deathTimer / 3);
+    }
+
+    if (this.facingLeft) {
+      ctx.scale(-1, 1);
+    }
+
+    // Color based on state
+    let bodyColor = '#ff6347'; // Tomato red
+    let shellColor = '#cd5c5c'; // Indian red
+    if (this.state === 'dying') {
+      bodyColor = '#808080';
+      shellColor = '#606060';
+    } else if (this.state === 'hunting') {
+      bodyColor = '#ff4500'; // Orange red when hunting
+      shellColor = '#dc143c';
+    } else if (this.hunger > 60) {
+      bodyColor = '#8b0000'; // Dark red when hungry
+      shellColor = '#800000';
+    }
+
+    // Legs (6 total, animated)
+    ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = 4;
+    for (let i = 0; i < 3; i++) {
+      const legOffset = (i - 1) * this.size * 0.4;
+      const legWiggle = Math.sin(this.legPhase + i * 1.2) * 5;
+
+      // Left leg
+      ctx.beginPath();
+      ctx.moveTo(legOffset - this.size * 0.3, 0);
+      ctx.lineTo(legOffset - this.size * 0.6 - legWiggle, this.size * 0.3);
+      ctx.lineTo(legOffset - this.size * 0.5 - legWiggle, this.size * 0.5);
+      ctx.stroke();
+
+      // Right leg
+      ctx.beginPath();
+      ctx.moveTo(legOffset + this.size * 0.3, 0);
+      ctx.lineTo(legOffset + this.size * 0.6 + legWiggle, this.size * 0.3);
+      ctx.lineTo(legOffset + this.size * 0.5 + legWiggle, this.size * 0.5);
+      ctx.stroke();
+    }
+
+    // Shell body
+    ctx.fillStyle = shellColor;
+    ctx.beginPath();
+    ctx.ellipse(0, -this.size * 0.2, this.size * 0.8, this.size * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Shell segments
+    ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, -this.size * 0.2, this.size * 0.5, Math.PI * 0.2, Math.PI * 0.8);
+    ctx.stroke();
+
+    // Claws
+    const clawAngle = 0.3 + this.clawOpen * 0.4;
+    ctx.fillStyle = bodyColor;
+
+    // Left claw
+    ctx.save();
+    ctx.translate(-this.size * 0.7, -this.size * 0.1);
+    ctx.rotate(-0.3);
+    // Claw arm
+    ctx.fillRect(-15, -4, 20, 8);
+    // Claw pincer (top)
+    ctx.save();
+    ctx.rotate(-clawAngle);
+    ctx.beginPath();
+    ctx.moveTo(-18, 0);
+    ctx.lineTo(-30, -8);
+    ctx.lineTo(-25, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    // Claw pincer (bottom)
+    ctx.save();
+    ctx.rotate(clawAngle);
+    ctx.beginPath();
+    ctx.moveTo(-18, 0);
+    ctx.lineTo(-30, 8);
+    ctx.lineTo(-25, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    ctx.restore();
+
+    // Right claw
+    ctx.save();
+    ctx.translate(this.size * 0.7, -this.size * 0.1);
+    ctx.rotate(0.3);
+    // Claw arm
+    ctx.fillRect(-5, -4, 20, 8);
+    // Claw pincer (top)
+    ctx.save();
+    ctx.rotate(clawAngle);
+    ctx.beginPath();
+    ctx.moveTo(18, 0);
+    ctx.lineTo(30, -8);
+    ctx.lineTo(25, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    // Claw pincer (bottom)
+    ctx.save();
+    ctx.rotate(-clawAngle);
+    ctx.beginPath();
+    ctx.moveTo(18, 0);
+    ctx.lineTo(30, 8);
+    ctx.lineTo(25, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    ctx.restore();
+
+    // Eye stalks
+    ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-this.size * 0.2, -this.size * 0.5);
+    ctx.lineTo(-this.size * 0.25, -this.size * 0.9);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(this.size * 0.2, -this.size * 0.5);
+    ctx.lineTo(this.size * 0.25, -this.size * 0.9);
+    ctx.stroke();
+
+    // Eyes
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(-this.size * 0.25, -this.size * 0.9, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(this.size * 0.25, -this.size * 0.9, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eye shine
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(-this.size * 0.27, -this.size * 0.92, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(this.size * 0.23, -this.size * 0.92, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // Label
+    ctx.fillStyle = '#ff6347';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('CRUNCHER', this.x, this.y + this.size * 0.7 + 12);
+
+    // Hunger warning
+    if (this.hunger > 60 && this.state !== 'dying') {
+      ctx.fillStyle = this.hunger > 80 ? '#ff0000' : '#ffaa00';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('HUNGRY!', this.x, this.y - this.size - 10);
+    }
+
+    // Beetle ready indicator
+    if (this.hunger < 50 && this.coinTimer < 3) {
+      ctx.fillStyle = '#3d2b1f';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('\u2022', this.x, this.y - this.size * 0.8);
+    }
+  }
+}
+
+// ============================================
+// Beetlemuncher Class (Green tadpole that eats beetles)
+// ============================================
+class Beetlemuncher {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.targetX = x;
+    this.targetY = y;
+    this.speed = 70;
+    this.hunger = 0;
+    this.state = 'wandering';
+    this.facingLeft = false;
+    this.wanderTimer = 0;
+    this.size = 38;
+
+    // Death animation
+    this.deathTimer = 0;
+
+    // Pearl production - drops pearl every 20 seconds when well-fed
+    this.coinTimer = 20;
+
+    // Beetle hunting
+    this.targetBeetle = null;
+
+    // Animation
+    this.tailPhase = 0;
+    this.mouthOpen = 0;
+  }
+
+  update(dt) {
+    this.tailPhase += dt * 6;
+
+    // Handle dying state
+    if (this.state === 'dying') {
+      this.deathTimer += dt;
+      this.y -= 30 * dt;
+      if (this.y < tankManager.padding || this.deathTimer > 3) {
+        this.state = 'dead';
+      }
+      return;
+    }
+
+    // Hunger increases
+    this.hunger += dt * 3;
+
+    if (this.hunger >= 100) {
+      this.state = 'dying';
+      sound.play('death');
+      spawnParticles(this.x, this.y, 'bubble', 6);
+      return;
+    }
+
+    // Pearl production when well-fed
+    if (this.hunger < 50) {
+      this.coinTimer -= dt;
+      if (this.coinTimer <= 0) {
+        coins.push(new Coin(this.x, this.y, 'pearl'));
+        spawnParticles(this.x, this.y, 'sparkle', 8);
+        this.coinTimer = 20;
+      }
+    }
+
+    // Hunt beetles when hungry
+    if (this.hunger > 30) {
+      this.targetBeetle = this.findNearestBeetle();
+      if (this.targetBeetle) {
+        this.state = 'hunting';
+        this.targetX = this.targetBeetle.x;
+        this.targetY = this.targetBeetle.y;
+        this.mouthOpen = Math.min(1, this.mouthOpen + dt * 4);
+
+        // Check if caught beetle
+        const dx = this.targetBeetle.x - this.x;
+        const dy = this.targetBeetle.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < this.size * 0.5 + this.targetBeetle.size) {
+          // Eat the beetle!
+          this.targetBeetle.collected = true;
+          this.hunger = Math.max(0, this.hunger - 35);
+          this.state = 'wandering';
+          this.targetBeetle = null;
+          sound.play('coin');
+          spawnParticles(this.x, this.y, 'sparkle', 5);
+        }
+      } else {
+        this.state = 'hungry';
+        this.mouthOpen = Math.max(0, this.mouthOpen - dt * 2);
+      }
+    } else {
+      this.state = 'wandering';
+      this.targetBeetle = null;
+      this.mouthOpen = Math.max(0, this.mouthOpen - dt * 2);
+
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        const newPos = tankManager.getRandomPosition();
+        this.targetX = newPos.x;
+        this.targetY = newPos.y;
+        this.wanderTimer = 2 + Math.random() * 3;
+      }
+    }
+
+    // Movement
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 5) {
+      const currentSpeed = this.state === 'hunting' ? this.speed * 1.4 : this.speed;
+      this.x += (dx / dist) * currentSpeed * dt;
+      this.y += (dy / dist) * currentSpeed * dt;
+      this.facingLeft = dx < 0;
+    }
+
+    const clamped = tankManager.clampToTank(this.x, this.y);
+    this.x = clamped.x;
+    this.y = clamped.y;
+  }
+
+  findNearestBeetle() {
+    let nearest = null;
+    let nearestDist = Infinity;
+
+    for (const beetle of beetles) {
+      if (beetle.collected) continue;
+
+      const dx = beetle.x - this.x;
+      const dy = beetle.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = beetle;
+      }
+    }
+    return nearest;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.state === 'dying') {
+      ctx.rotate(Math.PI);
+      ctx.globalAlpha = Math.max(0, 1 - this.deathTimer / 3);
+    }
+
+    if (this.facingLeft) {
+      ctx.scale(-1, 1);
+    }
+
+    // Color based on state
+    let bodyColor = '#32cd32'; // Lime green
+    let bellyColor = '#90ee90'; // Light green
+    if (this.state === 'dying') {
+      bodyColor = '#808080';
+      bellyColor = '#a0a0a0';
+    } else if (this.state === 'hunting') {
+      bodyColor = '#228b22'; // Forest green when hunting
+      bellyColor = '#7cfc00';
+    } else if (this.hunger > 60) {
+      bodyColor = '#006400'; // Dark green when hungry
+      bellyColor = '#556b2f';
+    }
+
+    // Tail (tapered, wavy)
+    const tailWave = Math.sin(this.tailPhase) * 8;
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.moveTo(-this.size * 0.3, 0);
+    ctx.quadraticCurveTo(
+      -this.size * 0.7, tailWave,
+      -this.size * 1.1, tailWave * 0.5
+    );
+    ctx.quadraticCurveTo(
+      -this.size * 0.7, -tailWave * 0.3,
+      -this.size * 0.3, 0
+    );
+    ctx.fill();
+
+    // Tail fin
+    ctx.beginPath();
+    ctx.moveTo(-this.size * 0.9, tailWave * 0.3);
+    ctx.lineTo(-this.size * 1.3, tailWave - 5);
+    ctx.lineTo(-this.size * 1.3, tailWave + 5);
+    ctx.closePath();
+    ctx.fill();
+
+    // Body - tadpole shape (large head, tapered back)
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size * 0.5, this.size * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Belly
+    ctx.fillStyle = bellyColor;
+    ctx.beginPath();
+    ctx.ellipse(this.size * 0.1, this.size * 0.1, this.size * 0.3, this.size * 0.25, 0, 0, Math.PI);
+    ctx.fill();
+
+    // Dorsal fin (small)
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.moveTo(-this.size * 0.2, -this.size * 0.35);
+    ctx.lineTo(0, -this.size * 0.55);
+    ctx.lineTo(this.size * 0.1, -this.size * 0.35);
+    ctx.closePath();
+    ctx.fill();
+
+    // Side fins
+    ctx.beginPath();
+    ctx.ellipse(-this.size * 0.15, this.size * 0.15, this.size * 0.2, this.size * 0.1, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(this.size * 0.15, this.size * 0.15, this.size * 0.2, this.size * 0.1, -0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Mouth
+    const mouthSize = 6 + this.mouthOpen * 6;
+    ctx.fillStyle = '#004d00';
+    ctx.beginPath();
+    ctx.ellipse(this.size * 0.4, this.size * 0.05, mouthSize, mouthSize * (0.3 + this.mouthOpen * 0.5), 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes (large, characteristic of tadpole)
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(this.size * 0.15, -this.size * 0.15, 10, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(this.size * 0.35, -this.size * 0.1, 8, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pupils
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(this.size * 0.18, -this.size * 0.12, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(this.size * 0.38, -this.size * 0.08, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eye shine
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(this.size * 0.12, -this.size * 0.2, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(this.size * 0.33, -this.size * 0.14, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Outline
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size * 0.5, this.size * 0.45, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Label
+    ctx.fillStyle = '#32cd32';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('MUNCHER', this.x, this.y + this.size * 0.6 + 12);
+
+    // Hunger warning
+    if (this.hunger > 60 && this.state !== 'dying') {
+      ctx.fillStyle = this.hunger > 80 ? '#ff0000' : '#ffaa00';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('HUNGRY!', this.x, this.y - this.size * 0.6 - 10);
+    }
+
+    // Pearl ready indicator
+    if (this.hunger < 50 && this.coinTimer < 4) {
+      ctx.fillStyle = '#faf0e6';
+      ctx.font = 'bold 12px Arial';
+      ctx.fillText('\u25cf', this.x, this.y - this.size * 0.5);
+    }
+  }
+}
+
+// ============================================
 // Pellet Class
 // ============================================
 class Pellet {
@@ -1904,6 +2993,32 @@ class Coin {
         ctx.fill();
       }
 
+      // Pearl - iridescent shimmer effect
+      if (this.type === 'pearl') {
+        // Subtle rainbow shimmer
+        const shimmerAngle = this.age * 2;
+        const shimmerX = Math.cos(shimmerAngle) * this.size * 0.2;
+        const shimmerY = Math.sin(shimmerAngle) * this.size * 0.2;
+
+        // Pink tint
+        ctx.fillStyle = 'rgba(255, 182, 193, 0.3)';
+        ctx.beginPath();
+        ctx.arc(this.x + shimmerX, this.y + shimmerY, this.size * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Blue tint on opposite side
+        ctx.fillStyle = 'rgba(173, 216, 230, 0.3)';
+        ctx.beginPath();
+        ctx.arc(this.x - shimmerX, this.y - shimmerY, this.size * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Extra bright center highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.beginPath();
+        ctx.arc(this.x - this.size * 0.2, this.y - this.size * 0.2, this.size * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       // $ symbol for silver/gold
       if (this.type === 'silver' || this.type === 'gold') {
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -1911,6 +3026,42 @@ class Coin {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('$', this.x, this.y);
+      }
+
+      // Treasure chest shape
+      if (this.type === 'treasure') {
+        // Chest body (brown rectangle)
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(this.x - this.size * 0.6, this.y - this.size * 0.4, this.size * 1.2, this.size * 0.8);
+
+        // Chest lid (darker brown curved top)
+        ctx.fillStyle = '#8b4513';
+        ctx.beginPath();
+        ctx.arc(this.x - this.size * 0.3, this.y - this.size * 0.4, this.size * 0.4, Math.PI, 0, true);
+        ctx.arc(this.x + this.size * 0.3, this.y - this.size * 0.4, this.size * 0.4, Math.PI, 0, false);
+        ctx.fill();
+
+        // Gold trim
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(this.x - this.size * 0.6, this.y - this.size * 0.4, this.size * 1.2, this.size * 0.8);
+
+        // Gold coins inside glow
+        ctx.fillStyle = 'rgba(255,215,0,0.6)';
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y, this.size * 0.5, this.size * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Lock detail
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y + this.size * 0.1, this.size * 0.15, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#654321';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y + this.size * 0.1, this.size * 0.1, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
@@ -2047,6 +3198,18 @@ class Sylvester {
     let nearest = null;
     let nearestDist = Infinity;
 
+    // PRIORITY 1: Check ultravores first (aliens prioritize the large target)
+    for (const uv of ultravores) {
+      if (uv.state === 'dead' || uv.state === 'dying') continue;
+      const dx = uv.x - this.x;
+      const dy = uv.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = uv;
+      }
+    }
+
     // Check guppies
     for (const guppy of guppies) {
       if (guppy.state === 'dead' || guppy.state === 'dying') continue;
@@ -2092,6 +3255,30 @@ class Sylvester {
       if (dist < nearestDist) {
         nearestDist = dist;
         nearest = starcatcher;
+      }
+    }
+
+    // Check guppycrunchers
+    for (const gc of guppycrunchers) {
+      if (gc.state === 'dead' || gc.state === 'dying') continue;
+      const dx = gc.x - this.x;
+      const dy = gc.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = gc;
+      }
+    }
+
+    // Check beetlemunchers
+    for (const bm of beetlemunchers) {
+      if (bm.state === 'dead' || bm.state === 'dying') continue;
+      const dx = bm.x - this.x;
+      const dy = bm.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = bm;
       }
     }
 
@@ -2453,6 +3640,18 @@ canvas.addEventListener('click', (e) => {
     }
   }
 
+  // Check for beetle collection
+  for (let i = beetles.length - 1; i >= 0; i--) {
+    if (beetles[i].isClicked(x, y)) {
+      gold += BEETLE_VALUE;
+      beetles[i].collected = true;
+      sound.play('coin');
+      spawnParticles(beetles[i].x, beetles[i].y, 'coin_sparkle', 6);
+      updateGoldDisplay();
+      return;
+    }
+  }
+
   // Spawn pellet if enough gold
   if (gold >= PELLET_COST) {
     gold -= PELLET_COST;
@@ -2575,6 +3774,35 @@ function buyStarcatcher() {
   }
 }
 
+function buyGuppycruncher() {
+  if (gold >= GUPPYCRUNCHER_COST) {
+    gold -= GUPPYCRUNCHER_COST;
+    guppycrunchers.push(new Guppycruncher());
+    sound.play('buy');
+    updateGoldDisplay();
+  }
+}
+
+function buyBeetlemuncher() {
+  if (gold >= BEETLEMUNCHER_COST) {
+    gold -= BEETLEMUNCHER_COST;
+    const pos = tankManager.getRandomPosition();
+    beetlemunchers.push(new Beetlemuncher(pos.x, pos.y));
+    sound.play('buy');
+    updateGoldDisplay();
+  }
+}
+
+function buyUltravore() {
+  if (gold >= ULTRAVORE_COST) {
+    gold -= ULTRAVORE_COST;
+    const pos = tankManager.getRandomPosition();
+    ultravores.push(new Ultravore(pos.x, pos.y));
+    sound.play('buy');
+    updateGoldDisplay();
+  }
+}
+
 function updateLaserButtonState() {
   const btn = document.getElementById('buyLaserBtn');
   if (btn && laserUpgraded) {
@@ -2608,6 +3836,9 @@ window.buyBreeder = buyBreeder;
 window.buyLaser = buyLaser;
 window.buyFeeder = buyFeeder;
 window.buyStarcatcher = buyStarcatcher;
+window.buyGuppycruncher = buyGuppycruncher;
+window.buyBeetlemuncher = buyBeetlemuncher;
+window.buyUltravore = buyUltravore;
 window.toggleSound = toggleSound;
 window.saveGame = saveGame;
 window.newGame = newGame;
@@ -2714,6 +3945,46 @@ function gameLoop(timestamp) {
       starcatchers.splice(i, 1);
     } else {
       starcatcher.draw(ctx);
+    }
+  }
+
+  // Update and draw guppycrunchers
+  for (let i = guppycrunchers.length - 1; i >= 0; i--) {
+    guppycrunchers[i].update(dt);
+    if (guppycrunchers[i].state === 'dead') {
+      guppycrunchers.splice(i, 1);
+    } else {
+      guppycrunchers[i].draw(ctx);
+    }
+  }
+
+  // Update and draw beetles
+  for (let i = beetles.length - 1; i >= 0; i--) {
+    beetles[i].update(dt);
+    if (beetles[i].collected) {
+      beetles.splice(i, 1);
+    } else {
+      beetles[i].draw(ctx);
+    }
+  }
+
+  // Update and draw beetlemunchers
+  for (let i = beetlemunchers.length - 1; i >= 0; i--) {
+    beetlemunchers[i].update(dt);
+    if (beetlemunchers[i].state === 'dead') {
+      beetlemunchers.splice(i, 1);
+    } else {
+      beetlemunchers[i].draw(ctx);
+    }
+  }
+
+  // Update and draw ultravores
+  for (let i = ultravores.length - 1; i >= 0; i--) {
+    ultravores[i].update(dt);
+    if (ultravores[i].state === 'dead') {
+      ultravores.splice(i, 1);
+    } else {
+      ultravores[i].draw(ctx);
     }
   }
 
