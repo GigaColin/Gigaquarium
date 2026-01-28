@@ -116,19 +116,19 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 - [x] Visual: Stars have sparkle effect, Starcatcher has unique upward-facing design
 
 ### Phase 11: Bottom-Dweller Food Chain
-- [ ] Guppycruncher ($800): Crab-like creature confined to tank bottom, jumps up to eat small guppies
-- [ ] Beetle Drops: Guppycruncher drops Beetles ($150) instead of diamonds
-- [ ] Beetles: New collectible that scuttles along tank bottom (doesn't sink like coins)
-- [ ] Beetlemuncher ($1000): Green tadpole-like fish that eats beetles
-- [ ] Pearl Drops: Beetlemuncher produces Pearls ($500) every 20 seconds when fed
-- [ ] Food Chain: Guppy → Guppycruncher → Beetle → Beetlemuncher → Pearl
+- [x] Guppycruncher ($800): Crab-like creature confined to tank bottom, jumps up to eat small guppies
+- [x] Beetle Drops: Guppycruncher drops Beetles ($150) instead of diamonds
+- [x] Beetles: New collectible that scuttles along tank bottom (doesn't sink like coins)
+- [x] Beetlemuncher ($1000): Green tadpole-like fish that eats beetles
+- [x] Pearl Drops: Beetlemuncher produces Pearls ($500) every 20 seconds when fed
+- [x] Food Chain: Guppy → Guppycruncher → Beetle → Beetlemuncher → Pearl
 
 ### Phase 12: Ultravore (Apex Predator)
-- [ ] Ultravore ($5000): Massive silver prehistoric fish - the ultimate predator
-- [ ] Diet: Eats Carnivores when hungry (not guppies)
-- [ ] Treasure Chest: Drops Treasure Chests ($2000) every 25 seconds
-- [ ] Vulnerability: Very slow, large target - aliens prioritize it
-- [ ] Risk/Reward: Highest income but expensive to replace and needs carnivore supply
+- [x] Ultravore ($5000): Massive silver prehistoric fish - the ultimate predator
+- [x] Diet: Eats Carnivores when hungry (not guppies)
+- [x] Treasure Chest: Drops Treasure Chests ($2000) every 25 seconds
+- [x] Vulnerability: Very slow, large target - aliens prioritize it
+- [x] Risk/Reward: Highest income but expensive to replace and needs carnivore supply
 
 ### Phase 13: Expanded Pet System
 - [ ] Niko ($600): Seahorse that produces pearls ($250) every 40 seconds passively
@@ -278,3 +278,32 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
   - Unique visual design with upward-facing eyes
 - Added alien targeting for starcatchers
 - Save/Load updated for starcatchers
+
+**Iteration 12:** Phase 11 Complete - Bottom-Dweller Food Chain:
+- Guppycruncher ($800): Orange crab-like creature at tank bottom
+  - Confined to ground, uses jumping mechanic to catch prey
+  - Hunts small guppies with `findSmallGuppy()` targeting
+  - Drops beetles ($150) every 15 seconds when fed
+- Beetle Class: New collectible entity
+  - Scuttles horizontally along tank bottom (doesn't sink)
+  - Click to collect for $150 value
+  - Serves as food source for Beetlemuncher
+- Beetlemuncher ($1000): Green tadpole-like bottom dweller
+  - Hunts beetles using `findNearestBeetle()` method
+  - Drops pearls ($500) every 20 seconds when fed
+  - Completes the food chain: Guppy → Guppycruncher → Beetle → Beetlemuncher → Pearl
+- Save/Load updated for guppycrunchers, beetles, and beetlemunchers
+
+**Iteration 13:** Phase 12 Complete - Ultravore (Apex Predator):
+- Ultravore ($5000): Massive 60px silver prehistoric fish
+  - Slowest predator (speed 50) but highest value drops
+  - Hunts carnivores when hungry using `findCarnivore()` method
+  - Drops treasure chests ($2000) every 25 seconds
+- Alien Interaction: Ultravores attack aliens as priority behavior
+  - 3-second resilience to alien attacks (`beingEatenDuration = 3`)
+  - Large target makes it vulnerable but can fight back
+- Risk/Reward Balance: High income potential offset by:
+  - Expensive cost to replace
+  - Requires carnivore supply as food source
+  - Slow speed makes escape difficult
+- Save/Load updated for ultravores
