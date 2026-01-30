@@ -9,7 +9,24 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 - **Language:** JavaScript (ES6+)
 - **Storage:** LocalStorage for save games (future phase)
 
-## Core Game Data (Wiki-Accurate)
+## Core Game Data (Sprite-Based)
+
+| Entity | Food Source | Drops | Notes |
+|--------|-------------|-------|-------|
+| Trout | Pellets | Silver ($15) | Basic fish, no evolution |
+| Skellfin | Trouts | Diamond ($200) | Predator, attacks aliens |
+| MobiusDickens | Skellfins | Chest ($1500) | Apex predator, slow but high value |
+| Crab | Trouts | Beetle ($150) | Bottom-dweller, jumps to catch fish |
+| Breeder | Pellets | None | Spawns baby Trouts over time |
+| Feeder | None | Pellets | Drops food every 15-20s, doesn't eat |
+| Starcatcher | Stars | Diamond ($200) | Bottom-dweller, mouth faces up |
+| Beetlemuncher | Beetles | Pearl ($500) | Tadpole-like, eats beetles from floor |
+| WardenLamprey | None | None | Attacks aliens (2 dmg/sec) |
+| Seeker | None | None | Auto-collects coins within range |
+| Anemone | None | None | Heals nearby fish (-5 hunger/sec) |
+| Geotle | Pellets | None | Spawns baby Trout every 25s |
+
+### Legacy Core Game Data (Pre-Sprite, with Evolution)
 
 | Entity | Food Source | Drops | Growth/Notes |
 |--------|-------------|-------|--------------|
@@ -160,6 +177,23 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 - [ ] Screenshot Mode: Hide UI and capture tank image
 - [ ] Ambient Mode: Fish swim slower, relaxing background music option
 
+### Phase 17: Sprite Migration & New Fish
+- [x] Create fishData.js with FISH_SPECIES configuration (name, rarity, size, behavior, imageUrl, iconUrl, cost, coinType, coinValue, coinDropInterval)
+- [x] Add SIZE_CONFIG with pixel sizes and speeds for sm/med/lg/xxl
+- [x] Add image preloading system with imageCache and preloadFishImages()
+- [x] Replace Guppy class with Trout (sprite-based, no evolution)
+- [x] Replace Carnivore class with Skellfin (sprite-based)
+- [x] Replace Ultravore class with MobiusDickens (sprite-based, $1500 chests)
+- [ ] Replace Guppycruncher class with Crab (sprite-based)
+- [ ] Add WardenLamprey class: Attacks aliens, deals 2 damage/sec
+- [ ] Add Seeker class: Auto-collects coins within detection range
+- [ ] Add Anemone class: Heals nearby fish (-5 hunger/sec)
+- [ ] Add Geotle class: Spawns baby Trout every 25 seconds
+- [ ] Update shop UI with new fish names and costs
+- [ ] Update save/load system for new fish types (remove evolution data)
+- [ ] Update game loop to render new fish arrays
+- [ ] Call preloadFishImages() in init() with loading state
+
 ---
 
 ## Status Log
@@ -307,3 +341,23 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
   - Requires carnivore supply as food source
   - Slow speed makes escape difficult
 - Save/Load updated for ultravores
+
+**Iteration 14:** Phase 17 In Progress - Sprite Migration:
+- Created fishData.js with FISH_SPECIES object containing 8 species
+  - Each species has: name, rarity, size, behavior, imageUrl, iconUrl, cost, coinType, coinValue, coinDropInterval
+  - SIZE_CONFIG defines pixel sizes and speeds for sm/med/lg/xxl
+  - COIN_TYPES and RARITY_COLORS exports
+- Added imageCache and preloadFishImages() async function
+- Replaced Guppy with Trout class (sprite-based)
+  - Removed evolution system (no stage, timesEaten, checkEvolution)
+  - Uses ctx.drawImage() with sprite, fallback to colored ellipse
+  - Added `const Guppy = Trout` alias for backward compatibility
+- Replaced Carnivore with Skellfin class (sprite-based)
+  - Renamed findSmallGuppy() to findTrout()
+  - Added `const Carnivore = Skellfin` alias
+- Replaced Ultravore with MobiusDickens class (sprite-based)
+  - Updated to drop $1500 chests (per FISH_SPECIES config)
+  - Renamed findCarnivore() to findSkellfin()
+  - Added `const Ultravore = MobiusDickens` alias
+- Legacy arrays (guppies, carnivores) maintained for backward compatibility
+- Still TODO: Crab class, special fish (WardenLamprey, Seeker, Anemone, Geotle), shop UI, save/load, game loop updates
