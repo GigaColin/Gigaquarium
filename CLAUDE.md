@@ -25,19 +25,20 @@ Gigaquarium/
 
 ## File Map (main.js)
 
-### Utility Classes
+### Utility Classes & Functions
 | Lines | Class/Section | Description |
 |-------|---------------|-------------|
 | 1-31 | Image Management | `imageCache`, `preloadFishImages()` |
 | 36-76 | TankManager | Boundary logic, `clampToTank()`, `getRandomPosition()` |
-| 234-351 | SoundSystem | Web Audio procedural sounds |
-| 352-451 | Particle | Particle effects (bubble, sparkle, blood) |
+| 78-130 | Utility Functions | `getDistance()`, `findNearest()`, `moveToward()` |
+| 280-400 | SoundSystem | Web Audio procedural sounds |
+| 400-500 | Particle | Particle effects (bubble, sparkle, blood) |
 
 ### Game State
 | Lines | Section | Description |
 |-------|---------|-------------|
-| 78-181 | State Variables | `gold`, arrays for all fish/pets/aliens, upgrade flags |
-| 93-118 | Cost Constants | All entity costs (TROUT_COST, SKELLFIN_COST, etc.) |
+| 132-230 | State Variables | `gold`, arrays for all fish/pets/aliens, upgrade flags |
+| 145-175 | Cost Aliases | Aliases to `constants.js` (TROUT_COST, SKELLFIN_COST, etc.) |
 
 ### Fish Classes (Sprite-Based)
 | Lines | Class | Behavior |
@@ -98,13 +99,13 @@ Gigaquarium/
 ## Common Tasks
 
 ### Adding a New Fish
-1. Create class (~200 lines) following Trout pattern at `main.js:887`
+1. Create class (~200 lines) following Trout pattern at `main.js:940`
 2. Add species config to `fishData.js`
-3. Add array declaration with other fish arrays (~line 80)
-4. Add cost constant (~line 100)
-5. Create `buy*()` function (~line 6600)
-6. Add to game loop update/draw section (~line 7100)
-7. Add to `saveGame()`/`loadGame()` (~line 500)
+3. Add array declaration with other fish arrays (~line 135)
+4. Add cost to `constants.js` COSTS object, create alias in main.js (~line 150)
+5. Create `buy*()` function using `buyFishHelper()` (~line 6610)
+6. Add to game loop update/draw section (~line 7150)
+7. Add to `saveGame()`/`loadGame()` (~line 550)
 8. Add button to `index.html`
 
 ### Adding a New Alien
@@ -113,16 +114,36 @@ Gigaquarium/
 3. Add to alien update loop in `gameLoop()` (~line 7150)
 
 ### Adding a New Pet
-1. Create class following Stinky pattern at `main.js:5012`
-2. Add to pet arrays and pet limit check (~line 6200)
-3. Create `buy*()` function with pet limit enforcement
-4. Add to save/load system
-5. Add button to `index.html`
+1. Create class following Stinky pattern at `main.js:5060`
+2. Add to pet arrays and `getPetCount()` (~line 6185)
+3. Create `buy*()` function using `buyPetHelper()` (~line 6700)
+4. Add cost to `constants.js` COSTS object
+5. Add to save/load system
+6. Add button to `index.html`
 
 ### Modifying Fish Behavior
-- Hunger/eating: Look for `findNearestPellet()` in fish class
-- Movement: Modify `update()` method, check `wanderTimer` logic
+- Hunger/eating: Use `findNearest(this, pellets)` utility
+- Movement: Use `moveToward(entity, targetX, targetY, speed, dt)` utility
 - Coin drops: Modify `coinTimer` and coin creation in `update()`
+
+## Utility Functions (main.js:78-130)
+
+| Function | Usage | Description |
+|----------|-------|-------------|
+| `getDistance(x1, y1, x2, y2)` | `getDistance(fish.x, fish.y, pellet.x, pellet.y)` | Calculate distance between two points |
+| `findNearest(entity, targets, options)` | `findNearest(this, pellets)` | Find nearest target from array |
+| `moveToward(entity, targetX, targetY, speed, dt)` | `moveToward(this, target.x, target.y, this.speed, dt)` | Move entity toward position, returns true if still moving |
+| `buyFishHelper(Class, array, cost, useRandomPos)` | `buyFishHelper(Trout, trouts, TROUT_COST)` | Generic fish purchase helper |
+| `buyPetHelper(Class, array, cost)` | `buyPetHelper(Niko, nikos, NIKO_COST)` | Generic pet purchase helper with pet limit check |
+
+### findNearest Options
+```javascript
+findNearest(entity, targets, {
+  radius: 200,                    // Max search radius (default: Infinity)
+  filter: t => !t.dead,          // Filter function (default: null)
+  getPosition: t => ({ x: t.px, y: t.py })  // Custom position getter (default: target itself)
+})
+```
 
 ## Development Guidelines
 - Use ES6 classes for game entities

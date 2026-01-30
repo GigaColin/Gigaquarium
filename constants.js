@@ -77,7 +77,8 @@ export const THRESHOLDS = {
   autoCollectRadius: 100,    // Auto-collect upgrade radius
   hungerWarning: 50,         // Hunger level when fish turns red
   hungerDeath: 100,          // Hunger level when fish dies
-  gusDeathFeedings: 20       // Pellets needed to kill Gus
+  gusDeathFeedings: 20,      // Pellets needed to kill Gus
+  prestigeMinimum: 50000     // Minimum totalEarned to prestige
 };
 
 // ============================================

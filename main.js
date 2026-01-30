@@ -1,6 +1,7 @@
 // Gigaquarium - Main Game File
 
 import { FISH_SPECIES, SIZE_CONFIG, RARITY_COLORS } from './fishData.js';
+import { COSTS, VALUES, TIMING, THRESHOLDS, PRESTIGE, PHYSICS } from './constants.js';
 
 // ============================================
 // Image Cache for Sprites
@@ -76,6 +77,65 @@ class TankManager {
 }
 
 // ============================================
+// Utility Functions
+// ============================================
+
+/**
+ * Calculate distance between two points
+ */
+function getDistance(x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/**
+ * Find nearest target from a list of entities
+ * @param {object} entity - The source entity with x, y properties
+ * @param {array} targets - Array of potential targets
+ * @param {object} options - Optional config: { radius, filter, getPosition }
+ * @returns {object|null} The nearest target or null
+ */
+function findNearest(entity, targets, options = {}) {
+  const { radius = Infinity, filter = null, getPosition = null } = options;
+  let nearest = null;
+  let nearestDist = Infinity;
+
+  for (const target of targets) {
+    if (filter && !filter(target)) continue;
+
+    const pos = getPosition ? getPosition(target) : target;
+    const dist = getDistance(entity.x, entity.y, pos.x, pos.y);
+
+    if (dist < radius && dist < nearestDist) {
+      nearestDist = dist;
+      nearest = target;
+    }
+  }
+  return nearest;
+}
+
+/**
+ * Move entity toward a target position
+ * @returns {boolean} true if entity is still moving, false if arrived
+ */
+function moveToward(entity, targetX, targetY, speed, dt) {
+  const dx = targetX - entity.x;
+  const dy = targetY - entity.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (dist > 5) {
+    entity.x += (dx / dist) * speed * dt;
+    entity.y += (dy / dist) * speed * dt;
+    if (entity.facingLeft !== undefined) {
+      entity.facingLeft = dx < 0;
+    }
+    return true;
+  }
+  return false;
+}
+
+// ============================================
 // Game State
 // ============================================
 const canvas = document.getElementById('gameCanvas');
@@ -90,41 +150,33 @@ const guppies = [];
 const carnivores = [];
 const coins = [];
 
-const PELLET_COST = 5;
-const FOOD_UPGRADE_COST = 200;
-const LASER_COST = 300;
-const STINKY_COST = 500;
-const BEETLE_VALUE = 150;
-const PEARL_VALUE = 500;
+// Cost aliases (using centralized constants.js)
+const PELLET_COST = COSTS.pellet;
+const FOOD_UPGRADE_COST = COSTS.foodUpgrade;
+const LASER_COST = COSTS.laser;
+const STINKY_COST = COSTS.stinky;
+const BEETLE_VALUE = VALUES.beetle;
+const PEARL_VALUE = VALUES.pearl;
 
-// Legacy fish costs (for backward compatibility - shop still uses these names)
-const GUPPY_COST = 100;
-const CARNIVORE_COST = 1000;
-const BREEDER_COST = 750;
-const FEEDER_COST = 1500;
-const STARCATCHER_COST = 1200;
-const GUPPYCRUNCHER_COST = 800;
-const BEETLEMUNCHER_COST = 1000;
-const ULTRAVORE_COST = 5000;
+// Legacy fish costs (aliases for backward compatibility)
+const GUPPY_COST = COSTS.guppy;
+const CARNIVORE_COST = COSTS.carnivore;
+const BREEDER_COST = COSTS.breeder;
+const FEEDER_COST = COSTS.feeder;
+const STARCATCHER_COST = COSTS.starcatcher;
+const GUPPYCRUNCHER_COST = COSTS.guppycruncher;
+const BEETLEMUNCHER_COST = COSTS.beetlemuncher;
+const ULTRAVORE_COST = COSTS.ultravore;
 
-// Fish costs from fishData.js
-const TROUT_COST = FISH_SPECIES.trout.cost;           // $100
-const SKELLFIN_COST = FISH_SPECIES.skellfin.cost;     // $2500
-const MOBIUS_COST = FISH_SPECIES.mobius_dickens.cost; // $8000
-const CRAB_COST = FISH_SPECIES.crab.cost;             // $800
-const WARDEN_COST = FISH_SPECIES.warden_lamprey.cost; // $2000
-const SEEKER_COST = FISH_SPECIES.seeker.cost;         // $5000
-const ANEMONE_COST = FISH_SPECIES.anemone.cost;       // $5000
-const GEOTLE_COST = FISH_SPECIES.geotle.cost;         // $4000
-
-// Legacy STAGES constant for backward compatibility with old saves
-const STAGES = {
-  small: { size: 20, feedingsToEvolve: 3 },
-  medium: { size: 28, feedingsToEvolve: 5 },
-  large: { size: 38, feedingsToEvolve: 10 },
-  king: { size: 48, feedingsToEvolve: 15 },
-  star: { size: 55, feedingsToEvolve: null }
-};
+// Sprite fish costs (from fishData.js)
+const TROUT_COST = FISH_SPECIES.trout.cost;
+const SKELLFIN_COST = FISH_SPECIES.skellfin.cost;
+const MOBIUS_COST = FISH_SPECIES.mobius_dickens.cost;
+const CRAB_COST = FISH_SPECIES.crab.cost;
+const WARDEN_COST = FISH_SPECIES.warden_lamprey.cost;
+const SEEKER_COST = FISH_SPECIES.seeker.cost;
+const ANEMONE_COST = FISH_SPECIES.anemone.cost;
+const GEOTLE_COST = FISH_SPECIES.geotle.cost;
 
 let foodUpgraded = false;
 let laserUpgraded = false;
@@ -158,24 +210,25 @@ const itchys = [];
 const clydes = [];
 let angie = null;  // Single instance (revive mechanic)
 
-const NIKO_COST = 600;
-const ZORF_COST = 400;
-const ITCHY_COST = 700;
-const CLYDE_COST = 550;
-const ANGIE_COST = 2000;
-const MAX_PETS = 3;
+// Pet costs (aliases for centralized constants)
+const NIKO_COST = COSTS.niko;
+const ZORF_COST = COSTS.zorf;
+const ITCHY_COST = COSTS.itchy;
+const CLYDE_COST = COSTS.clyde;
+const ANGIE_COST = COSTS.angie;
+const MAX_PETS = THRESHOLDS.maxPets;
 
 // Alien system
 let alien = null;
 let aliens = [];  // Support multiple aliens for waves
-let alienSpawnTimer = 60 + Math.random() * 30; // First spawn in 60-90 seconds
-let alienWarningTimer = 0;  // 5-second warning before spawn
+let alienSpawnTimer = TIMING.alienSpawnMin + Math.random() * (TIMING.alienSpawnMax - TIMING.alienSpawnMin);
+let alienWarningTimer = 0;
 let alienWarningActive = false;
 let totalEarned = 0;  // Track total gold earned for wave triggers
-const ALIEN_SPAWN_MIN = 60;
-const ALIEN_SPAWN_MAX = 90;
-const ALIEN_WARNING_DURATION = 5;  // 5-second warning
-const WAVE_THRESHOLD = 10000;  // Spawn pairs after $10,000 total earned
+const ALIEN_SPAWN_MIN = TIMING.alienSpawnMin;
+const ALIEN_SPAWN_MAX = TIMING.alienSpawnMax;
+const ALIEN_WARNING_DURATION = TIMING.alienWarningDuration;
+const WAVE_THRESHOLD = THRESHOLDS.waveSpawn;
 
 // Particle system
 const particles = [];
@@ -192,8 +245,8 @@ let gameSpeed = 1;
 
 // Auto-Collect Upgrade
 let autoCollectUpgraded = false;
-const AUTO_COLLECT_COST = 1000;
-const AUTO_COLLECT_RADIUS = 100;
+const AUTO_COLLECT_COST = COSTS.autoCollect;
+const AUTO_COLLECT_RADIUS = THRESHOLDS.autoCollectRadius;
 
 // Statistics System
 const stats = {
@@ -226,7 +279,7 @@ let achievementPopup = null;  // { name, desc, timer }
 // Prestige System
 let prestigeLevel = 0;
 let prestigePoints = 0;
-const PRESTIGE_THRESHOLD = 50000;  // Minimum totalEarned to prestige
+const PRESTIGE_THRESHOLD = THRESHOLDS.prestigeMinimum;
 
 // ============================================
 // Sound System (Web Audio API)
@@ -996,18 +1049,7 @@ class Trout {
   }
 
   findNearestPellet() {
-    let nearest = null;
-    let nearestDist = Infinity;
-    for (const pellet of pellets) {
-      const dx = pellet.x - this.x;
-      const dy = pellet.y - this.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearest = pellet;
-      }
-    }
-    return nearest;
+    return findNearest(this, pellets);
   }
 
   checkPelletCollision() {
@@ -1681,18 +1723,7 @@ class Breeder {
   }
 
   findNearestPellet() {
-    let nearest = null;
-    let nearestDist = Infinity;
-    for (const pellet of pellets) {
-      const dx = pellet.x - this.x;
-      const dy = pellet.y - this.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearest = pellet;
-      }
-    }
-    return nearest;
+    return findNearest(this, pellets);
   }
 
   checkPelletCollision() {
@@ -3145,18 +3176,7 @@ class Geotle {
   }
 
   findNearestPellet() {
-    let nearest = null;
-    let nearestDist = Infinity;
-    for (const pellet of pellets) {
-      const dx = pellet.x - this.x;
-      const dy = pellet.y - this.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearest = pellet;
-      }
-    }
-    return nearest;
+    return findNearest(this, pellets);
   }
 
   checkPelletCollision() {
@@ -6106,20 +6126,9 @@ class Angie {
 // Alien System Helper Functions
 // ============================================
 function findNearestAlien(x, y) {
-  let nearest = null;
-  let nearestDist = Infinity;
-
-  for (const a of aliens) {
-    if (a.dead || a.entering) continue;
-    const dx = a.x - x;
-    const dy = a.y - y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < nearestDist) {
-      nearestDist = dist;
-      nearest = a;
-    }
-  }
-  return nearest;
+  return findNearest({ x, y }, aliens, {
+    filter: a => !a.dead && !a.entering
+  });
 }
 
 function hasActiveAlien() {
@@ -6208,9 +6217,9 @@ function getTotalFishCount() {
 
 function getPrestigeBonus(type) {
   switch (type) {
-    case 'gold': return 1 + (prestigeLevel * 0.1);      // +10% per level
-    case 'speed': return 1 + (prestigeLevel * 0.05);    // +5% per level
-    case 'coinDrop': return 1 + (prestigeLevel * 0.05); // +5% per level
+    case 'gold': return 1 + (prestigeLevel * PRESTIGE.goldBonus);
+    case 'speed': return 1 + (prestigeLevel * PRESTIGE.speedBonus);
+    case 'coinDrop': return 1 + (prestigeLevel * PRESTIGE.coinRateBonus);
     default: return 1;
   }
 }
@@ -6551,15 +6560,50 @@ function updateGoldDisplay() {
 // ============================================
 // Shop Functions
 // ============================================
-function buyGuppy() {
-  if (gold >= GUPPY_COST) {
-    gold -= GUPPY_COST;
+
+/**
+ * Generic fish purchase helper
+ * @param {Function} FishClass - The fish class to instantiate
+ * @param {Array} targetArray - The array to add the fish to
+ * @param {number} cost - The cost of the fish
+ * @param {boolean} useRandomPos - Whether to spawn at random position (default true)
+ * @returns {boolean} Whether the purchase was successful
+ */
+function buyFishHelper(FishClass, targetArray, cost, useRandomPos = true) {
+  if (gold < cost) return false;
+  gold -= cost;
+  if (useRandomPos) {
     const pos = tankManager.getRandomPosition();
-    guppies.push(new Guppy(pos.x, pos.y));
-    stats.fishBought++;
-    sound.play('buy');
-    updateGoldDisplay();
+    targetArray.push(new FishClass(pos.x, pos.y));
+  } else {
+    targetArray.push(new FishClass());
   }
+  stats.fishBought++;
+  sound.play('buy');
+  updateGoldDisplay();
+  return true;
+}
+
+/**
+ * Generic pet purchase helper
+ * @param {Function} PetClass - The pet class to instantiate
+ * @param {Array} targetArray - The array to add the pet to
+ * @param {number} cost - The cost of the pet
+ * @returns {boolean} Whether the purchase was successful
+ */
+function buyPetHelper(PetClass, targetArray, cost) {
+  if (gold < cost || !canBuyPet()) return false;
+  gold -= cost;
+  const pos = tankManager.getRandomPosition();
+  targetArray.push(new PetClass(pos.x, pos.y));
+  sound.play('buy');
+  updateGoldDisplay();
+  updateAllPetButtons();
+  return true;
+}
+
+function buyGuppy() {
+  buyFishHelper(Guppy, guppies, GUPPY_COST);
 }
 
 function upgradeFood() {
@@ -6581,14 +6625,7 @@ function updateFoodButtonState() {
 }
 
 function buyCarnivore() {
-  if (gold >= CARNIVORE_COST) {
-    gold -= CARNIVORE_COST;
-    const pos = tankManager.getRandomPosition();
-    carnivores.push(new Carnivore(pos.x, pos.y));
-    stats.fishBought++;
-    sound.play('buy');
-    updateGoldDisplay();
-  }
+  buyFishHelper(Carnivore, carnivores, CARNIVORE_COST);
 }
 
 function getStinkyCost() {
@@ -6620,14 +6657,7 @@ function updateStinkyButtonState() {
 }
 
 function buyBreeder() {
-  if (gold >= BREEDER_COST) {
-    gold -= BREEDER_COST;
-    const pos = tankManager.getRandomPosition();
-    breeders.push(new Breeder(pos.x, pos.y));
-    stats.fishBought++;
-    sound.play('buy');
-    updateGoldDisplay();
-  }
+  buyFishHelper(Breeder, breeders, BREEDER_COST);
 }
 
 function buyLaser() {
@@ -6641,145 +6671,55 @@ function buyLaser() {
 }
 
 function buyFeeder() {
-  if (gold >= FEEDER_COST) {
-    gold -= FEEDER_COST;
-    const pos = tankManager.getRandomPosition();
-    feeders.push(new Feeder(pos.x, pos.y));
-    stats.fishBought++;
-    sound.play('buy');
-    updateGoldDisplay();
-  }
+  buyFishHelper(Feeder, feeders, FEEDER_COST);
 }
 
 function buyStarcatcher() {
-  if (gold >= STARCATCHER_COST) {
-    gold -= STARCATCHER_COST;
-    const pos = tankManager.getRandomPosition();
-    starcatchers.push(new Starcatcher(pos.x, pos.y));
-    stats.fishBought++;
-    sound.play('buy');
-    updateGoldDisplay();
-  }
+  buyFishHelper(Starcatcher, starcatchers, STARCATCHER_COST);
 }
 
 function buyGuppycruncher() {
-  if (gold >= GUPPYCRUNCHER_COST) {
-    gold -= GUPPYCRUNCHER_COST;
-    guppycrunchers.push(new Guppycruncher());
-    stats.fishBought++;
-    sound.play('buy');
-    updateGoldDisplay();
-  }
+  buyFishHelper(Guppycruncher, guppycrunchers, GUPPYCRUNCHER_COST, false);
 }
 
 function buyBeetlemuncher() {
-  if (gold >= BEETLEMUNCHER_COST) {
-    gold -= BEETLEMUNCHER_COST;
-    const pos = tankManager.getRandomPosition();
-    beetlemunchers.push(new Beetlemuncher(pos.x, pos.y));
-    stats.fishBought++;
-    sound.play('buy');
-    updateGoldDisplay();
-  }
+  buyFishHelper(Beetlemuncher, beetlemunchers, BEETLEMUNCHER_COST);
 }
 
 function buyUltravore() {
-  if (gold >= ULTRAVORE_COST) {
-    gold -= ULTRAVORE_COST;
-    const pos = tankManager.getRandomPosition();
-    ultravores.push(new Ultravore(pos.x, pos.y));
-    stats.fishBought++;
-    sound.play('buy');
-    updateGoldDisplay();
-  }
+  buyFishHelper(Ultravore, ultravores, ULTRAVORE_COST);
 }
 
 function buyWarden() {
-  if (gold >= WARDEN_COST) {
-    gold -= WARDEN_COST;
-    const pos = tankManager.getRandomPosition();
-    wardens.push(new WardenLamprey(pos.x, pos.y));
-    stats.fishBought++;
-    sound.play('buy');
-    updateGoldDisplay();
-  }
+  buyFishHelper(WardenLamprey, wardens, WARDEN_COST);
 }
 
 function buySeeker() {
-  if (gold >= SEEKER_COST) {
-    gold -= SEEKER_COST;
-    const pos = tankManager.getRandomPosition();
-    seekers.push(new Seeker(pos.x, pos.y));
-    stats.fishBought++;
-    sound.play('buy');
-    updateGoldDisplay();
-  }
+  buyFishHelper(Seeker, seekers, SEEKER_COST);
 }
 
 function buyAnemone() {
-  if (gold >= ANEMONE_COST) {
-    gold -= ANEMONE_COST;
-    const pos = tankManager.getRandomPosition();
-    anemones.push(new Anemone(pos.x, pos.y));
-    stats.fishBought++;
-    sound.play('buy');
-    updateGoldDisplay();
-  }
+  buyFishHelper(Anemone, anemones, ANEMONE_COST);
 }
 
 function buyGeotle() {
-  if (gold >= GEOTLE_COST) {
-    gold -= GEOTLE_COST;
-    const pos = tankManager.getRandomPosition();
-    geotles.push(new Geotle(pos.x, pos.y));
-    stats.fishBought++;
-    sound.play('buy');
-    updateGoldDisplay();
-  }
+  buyFishHelper(Geotle, geotles, GEOTLE_COST);
 }
 
 function buyNiko() {
-  if (gold >= NIKO_COST && canBuyPet()) {
-    gold -= NIKO_COST;
-    const pos = tankManager.getRandomPosition();
-    nikos.push(new Niko(pos.x, pos.y));
-    sound.play('buy');
-    updateGoldDisplay();
-    updateAllPetButtons();
-  }
+  buyPetHelper(Niko, nikos, NIKO_COST);
 }
 
 function buyZorf() {
-  if (gold >= ZORF_COST && canBuyPet()) {
-    gold -= ZORF_COST;
-    const pos = tankManager.getRandomPosition();
-    zorfs.push(new Zorf(pos.x, pos.y));
-    sound.play('buy');
-    updateGoldDisplay();
-    updateAllPetButtons();
-  }
+  buyPetHelper(Zorf, zorfs, ZORF_COST);
 }
 
 function buyItchy() {
-  if (gold >= ITCHY_COST && canBuyPet()) {
-    gold -= ITCHY_COST;
-    const pos = tankManager.getRandomPosition();
-    itchys.push(new Itchy(pos.x, pos.y));
-    sound.play('buy');
-    updateGoldDisplay();
-    updateAllPetButtons();
-  }
+  buyPetHelper(Itchy, itchys, ITCHY_COST);
 }
 
 function buyClyde() {
-  if (gold >= CLYDE_COST && canBuyPet()) {
-    gold -= CLYDE_COST;
-    const pos = tankManager.getRandomPosition();
-    clydes.push(new Clyde(pos.x, pos.y));
-    sound.play('buy');
-    updateGoldDisplay();
-    updateAllPetButtons();
-  }
+  buyPetHelper(Clyde, clydes, CLYDE_COST);
 }
 
 function buyAngie() {
