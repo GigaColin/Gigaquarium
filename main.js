@@ -97,6 +97,16 @@ const STINKY_COST = 500;
 const BEETLE_VALUE = 150;
 const PEARL_VALUE = 500;
 
+// Legacy fish costs (for backward compatibility - shop still uses these names)
+const GUPPY_COST = 100;
+const CARNIVORE_COST = 1000;
+const BREEDER_COST = 750;
+const FEEDER_COST = 1500;
+const STARCATCHER_COST = 1200;
+const GUPPYCRUNCHER_COST = 800;
+const BEETLEMUNCHER_COST = 1000;
+const ULTRAVORE_COST = 5000;
+
 // Fish costs from fishData.js
 const TROUT_COST = FISH_SPECIES.trout.cost;           // $100
 const SKELLFIN_COST = FISH_SPECIES.skellfin.cost;     // $2500
@@ -106,6 +116,15 @@ const WARDEN_COST = FISH_SPECIES.warden_lamprey.cost; // $2000
 const SEEKER_COST = FISH_SPECIES.seeker.cost;         // $5000
 const ANEMONE_COST = FISH_SPECIES.anemone.cost;       // $5000
 const GEOTLE_COST = FISH_SPECIES.geotle.cost;         // $4000
+
+// Legacy STAGES constant for backward compatibility with old saves
+const STAGES = {
+  small: { size: 20, feedingsToEvolve: 3 },
+  medium: { size: 28, feedingsToEvolve: 5 },
+  large: { size: 38, feedingsToEvolve: 10 },
+  king: { size: 48, feedingsToEvolve: 15 },
+  star: { size: 55, feedingsToEvolve: null }
+};
 
 let foodUpgraded = false;
 let laserUpgraded = false;
@@ -148,12 +167,66 @@ const MAX_PETS = 3;
 
 // Alien system
 let alien = null;
+let aliens = [];  // Support multiple aliens for waves
 let alienSpawnTimer = 60 + Math.random() * 30; // First spawn in 60-90 seconds
+let alienWarningTimer = 0;  // 5-second warning before spawn
+let alienWarningActive = false;
+let totalEarned = 0;  // Track total gold earned for wave triggers
 const ALIEN_SPAWN_MIN = 60;
 const ALIEN_SPAWN_MAX = 90;
+const ALIEN_WARNING_DURATION = 5;  // 5-second warning
+const WAVE_THRESHOLD = 10000;  // Spawn pairs after $10,000 total earned
 
 // Particle system
 const particles = [];
+
+// Missile system (for Destructor)
+const missiles = [];
+
+// ============================================
+// Quality of Life & Progression (Phase 15)
+// ============================================
+
+// Speed Toggle
+let gameSpeed = 1;
+
+// Auto-Collect Upgrade
+let autoCollectUpgraded = false;
+const AUTO_COLLECT_COST = 1000;
+const AUTO_COLLECT_RADIUS = 100;
+
+// Statistics System
+const stats = {
+  totalEarned: 0,       // Track total earnings (separate from totalEarned for prestige tracking)
+  totalFishLost: 0,     // Increment on fish death
+  aliensDefeated: 0,    // Increment on alien death
+  coinsCollected: 0,    // Increment on coin pickup
+  fishBought: 0,        // Increment on fish purchase
+  timePlayed: 0         // Accumulate dt in game loop
+};
+
+// Statistics panel visibility
+let statsVisible = false;
+
+// Achievement System
+const ACHIEVEMENTS = {
+  first_fish: { name: 'First Friend', desc: 'Buy your first fish', unlocked: false },
+  first_carnivore: { name: 'Predator', desc: 'Buy a carnivore', unlocked: false },
+  alien_slayer: { name: 'Alien Slayer', desc: 'Defeat 10 aliens', unlocked: false },
+  millionaire: { name: 'Millionaire', desc: 'Earn $100,000 total', unlocked: false },
+  full_tank: { name: 'Full Tank', desc: 'Have 20+ fish at once', unlocked: false },
+  pet_lover: { name: 'Pet Lover', desc: 'Own all 6 pet types', unlocked: false },
+  survivor: { name: 'Survivor', desc: 'Play for 30 minutes', unlocked: false }
+};
+
+const unlockedAchievements = new Set();
+let achievementCheckTimer = 0;
+let achievementPopup = null;  // { name, desc, timer }
+
+// Prestige System
+let prestigeLevel = 0;
+let prestigePoints = 0;
+const PRESTIGE_THRESHOLD = 50000;  // Minimum totalEarned to prestige
 
 // ============================================
 // Sound System (Web Audio API)
@@ -390,8 +463,16 @@ const SAVE_KEY = 'gigaquarium_save';
 function saveGame() {
   const saveData = {
     gold: gold,
+    totalEarned: totalEarned,
     foodUpgraded: foodUpgraded,
     laserUpgraded: laserUpgraded,
+    // Phase 15: Quality of Life
+    autoCollectUpgraded: autoCollectUpgraded,
+    gameSpeed: gameSpeed,
+    stats: stats,
+    unlockedAchievements: Array.from(unlockedAchievements),
+    prestigeLevel: prestigeLevel,
+    prestigePoints: prestigePoints,
     stinkyCount: stinkies.length,
     guppies: guppies.map(g => ({
       x: g.x,
@@ -438,6 +519,37 @@ function saveGame() {
       hunger: uv.hunger,
       coinTimer: uv.coinTimer
     })),
+    // New Phase 18 fish
+    wardens: wardens.map(w => ({ x: w.x, y: w.y })),
+    seekers: seekers.map(s => ({ x: s.x, y: s.y })),
+    anemones: anemones.map(a => ({ x: a.x, y: a.y })),
+    geotles: geotles.map(g => ({
+      x: g.x,
+      y: g.y,
+      hunger: g.hunger,
+      spawnTimer: g.spawnTimer
+    })),
+    // New sprite-based arrays
+    trouts: trouts.map(t => ({
+      x: t.x,
+      y: t.y,
+      hunger: t.hunger
+    })),
+    skellfins: skellfins.map(s => ({
+      x: s.x,
+      y: s.y,
+      hunger: s.hunger
+    })),
+    mobiuses: mobiuses.map(m => ({
+      x: m.x,
+      y: m.y,
+      hunger: m.hunger
+    })),
+    crabs: crabs.map(c => ({
+      x: c.x,
+      hunger: c.hunger,
+      coinTimer: c.coinTimer
+    })),
     nikos: nikos.map(n => ({ x: n.x, y: n.y, pearlTimer: n.pearlTimer })),
     zorfs: zorfs.map(z => ({ x: z.x, y: z.y, dropTimer: z.dropTimer })),
     itchys: itchys.map(i => ({ x: i.x, y: i.y })),
@@ -461,8 +573,9 @@ function loadGame() {
 
     const saveData = JSON.parse(data);
 
-    // Restore gold
+    // Restore gold and total earned
     gold = saveData.gold || 100;
+    totalEarned = saveData.totalEarned || 0;
     updateGoldDisplay();
 
     // Restore upgrades
@@ -475,6 +588,38 @@ function loadGame() {
     if (laserUpgraded) {
       updateLaserButtonState();
     }
+
+    // Phase 15: Quality of Life restore
+    autoCollectUpgraded = saveData.autoCollectUpgraded || false;
+    if (autoCollectUpgraded) {
+      updateAutoCollectButtonState();
+    }
+
+    gameSpeed = saveData.gameSpeed || 1;
+    const speedBtn = document.getElementById('speedBtn');
+    if (speedBtn) {
+      speedBtn.textContent = `Speed: ${gameSpeed}x`;
+      speedBtn.classList.toggle('active', gameSpeed === 2);
+    }
+
+    // Restore stats
+    if (saveData.stats) {
+      Object.assign(stats, saveData.stats);
+    }
+
+    // Restore achievements
+    if (saveData.unlockedAchievements) {
+      for (const id of saveData.unlockedAchievements) {
+        unlockedAchievements.add(id);
+        if (ACHIEVEMENTS[id]) {
+          ACHIEVEMENTS[id].unlocked = true;
+        }
+      }
+    }
+
+    // Restore prestige
+    prestigeLevel = saveData.prestigeLevel || 0;
+    prestigePoints = saveData.prestigePoints || 0;
 
     // Restore Stinkies (support both old hasStinky and new stinkyCount)
     const stinkyCount = saveData.stinkyCount || (saveData.hasStinky ? 1 : 0);
@@ -603,6 +748,72 @@ function loadGame() {
       angie = new Angie(saveData.angie.x, saveData.angie.y);
     }
 
+    // Restore Phase 18 fish - Wardens
+    if (saveData.wardens) {
+      for (const wData of saveData.wardens) {
+        wardens.push(new WardenLamprey(wData.x, wData.y));
+      }
+    }
+
+    // Restore Seekers
+    if (saveData.seekers) {
+      for (const sData of saveData.seekers) {
+        seekers.push(new Seeker(sData.x, sData.y));
+      }
+    }
+
+    // Restore Anemones
+    if (saveData.anemones) {
+      for (const aData of saveData.anemones) {
+        anemones.push(new Anemone(aData.x, aData.y));
+      }
+    }
+
+    // Restore Geotles
+    if (saveData.geotles) {
+      for (const gData of saveData.geotles) {
+        const geotle = new Geotle(gData.x, gData.y);
+        geotle.hunger = Math.min(gData.hunger || 0, 50);
+        geotle.spawnTimer = gData.spawnTimer || 25;
+        geotles.push(geotle);
+      }
+    }
+
+    // Restore new sprite-based arrays
+    if (saveData.trouts) {
+      for (const tData of saveData.trouts) {
+        const trout = new Trout(tData.x, tData.y);
+        trout.hunger = Math.min(tData.hunger || 0, 50);
+        trouts.push(trout);
+      }
+    }
+
+    if (saveData.skellfins) {
+      for (const sData of saveData.skellfins) {
+        const skellfin = new Skellfin(sData.x, sData.y);
+        skellfin.hunger = Math.min(sData.hunger || 0, 50);
+        skellfins.push(skellfin);
+      }
+    }
+
+    if (saveData.mobiuses) {
+      for (const mData of saveData.mobiuses) {
+        const mobius = new MobiusDickens(mData.x, mData.y);
+        mobius.hunger = Math.min(mData.hunger || 0, 50);
+        mobiuses.push(mobius);
+      }
+    }
+
+    if (saveData.crabs) {
+      for (const cData of saveData.crabs) {
+        const crab = new Crab();
+        crab.x = cData.x;
+        crab.hunger = Math.min(cData.hunger || 0, 50);
+        crab.coinTimer = cData.coinTimer || 15;
+        crabs.push(crab);
+      }
+    }
+
     // Update all pet buttons
     updateAllPetButtons();
 
@@ -715,6 +926,7 @@ class Trout {
 
     if (this.hunger >= 100) {
       this.state = 'dying';
+      stats.totalFishLost++;
       sound.play('death');
       spawnParticles(this.x, this.y, 'bubble', 5);
       return;
@@ -755,8 +967,9 @@ class Trout {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist > 5) {
-      // Hungry speed boost - 30% faster when hunger > 50
-      const currentSpeed = this.hunger > 50 ? this.speed * 1.3 : this.speed;
+      // Hungry speed boost - 30% faster when hunger > 50, plus prestige bonus
+      const baseSpeed = this.hunger > 50 ? this.speed * 1.3 : this.speed;
+      const currentSpeed = baseSpeed * getPrestigeBonus('speed');
       this.x += (dx / dist) * currentSpeed * dt;
       this.y += (dy / dist) * currentSpeed * dt;
       this.facingLeft = dx < 0;
@@ -776,7 +989,9 @@ class Trout {
       // Drop a coin
       coins.push(new Coin(this.x, this.y, this.coinType));
       const [minInterval, maxInterval] = FISH_SPECIES.trout.coinDropInterval;
-      this.coinTimer = minInterval + Math.random() * (maxInterval - minInterval);
+      // Apply prestige bonus (faster drops = lower timer)
+      const baseTimer = minInterval + Math.random() * (maxInterval - minInterval);
+      this.coinTimer = baseTimer / getPrestigeBonus('coinDrop');
     }
   }
 
@@ -904,7 +1119,6 @@ class Skellfin {
   // Alias for backward compatibility
   get coinType() { return this._coinType || 'chest'; }
   set coinType(val) { this._coinType = val; }
-}
 
   update(dt) {
     // Handle dying state
@@ -922,6 +1136,7 @@ class Skellfin {
 
     if (this.hunger >= 100) {
       this.state = 'dying';
+      stats.totalFishLost++;
       sound.play('death');
       spawnParticles(this.x, this.y, 'bubble', 8);
       return;
@@ -1175,6 +1390,7 @@ class MobiusDickens {
 
     if (this.hunger >= 100) {
       this.state = 'dying';
+      stats.totalFishLost++;
       sound.play('death');
       spawnParticles(this.x, this.y, 'bubble', 12);
       return;
@@ -1406,6 +1622,7 @@ class Breeder {
 
     if (this.hunger >= 100) {
       this.state = 'dying';
+      stats.totalFishLost++;
       sound.play('death');
       spawnParticles(this.x, this.y, 'bubble', 5);
       return;
@@ -1448,8 +1665,9 @@ class Breeder {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist > 5) {
-      // Hungry speed boost - 30% faster when hunger > 50
-      const currentSpeed = this.hunger > 50 ? this.speed * 1.3 : this.speed;
+      // Hungry speed boost - 30% faster when hunger > 50, plus prestige bonus
+      const baseSpeed = this.hunger > 50 ? this.speed * 1.3 : this.speed;
+      const currentSpeed = baseSpeed * getPrestigeBonus('speed');
       this.x += (dx / dist) * currentSpeed * dt;
       this.y += (dy / dist) * currentSpeed * dt;
       this.facingLeft = dx < 0;
@@ -1799,6 +2017,7 @@ class Starcatcher {
 
     if (this.hunger >= 100) {
       this.state = 'dying';
+      stats.totalFishLost++;
       sound.play('death');
       spawnParticles(this.x, this.y, 'bubble', 5);
       return;
@@ -2129,16 +2348,18 @@ class Beetle {
 }
 
 // ============================================
-// Guppycruncher Class (Crab that eats small guppies)
+// Crab Class (Bottom-dweller that eats trout - Sprite Based)
 // ============================================
-class Guppycruncher {
+class Crab {
   constructor() {
     this.x = tankManager.padding + Math.random() * (tankManager.bounds.right - tankManager.padding * 2);
     this.y = tankManager.bounds.bottom - tankManager.padding;
     this.groundY = this.y; // Remember ground level
     this.targetX = this.x;
-    this.speed = 50;
-    this.size = 35;
+    this.species = 'crab';
+    const sizeConfig = SIZE_CONFIG[FISH_SPECIES.crab.size];
+    this.size = sizeConfig.pixelSize;
+    this.speed = sizeConfig.speed;
     this.hunger = 0;
     this.state = 'wandering';
     this.facingLeft = false;
@@ -2146,8 +2367,11 @@ class Guppycruncher {
     // Death animation
     this.deathTimer = 0;
 
-    // Beetle production - drops beetle every 15 seconds when fed
-    this.coinTimer = 15;
+    // Coin dropping - uses species config
+    const [minInterval, maxInterval] = FISH_SPECIES.crab.coinDropInterval;
+    this.coinTimer = minInterval + Math.random() * (maxInterval - minInterval);
+    this.coinType = FISH_SPECIES.crab.coinType;
+    this.coinValue = FISH_SPECIES.crab.coinValue;
 
     // Jumping mechanics
     this.vy = 0; // Vertical velocity
@@ -2177,18 +2401,22 @@ class Guppycruncher {
 
     if (this.hunger >= 100) {
       this.state = 'dying';
+      stats.totalFishLost++;
       sound.play('death');
       spawnParticles(this.x, this.y, 'bubble', 5);
       return;
     }
 
-    // Beetle production when well-fed
+    // Coin production when well-fed
     if (this.hunger < 50) {
       this.coinTimer -= dt;
       if (this.coinTimer <= 0) {
-        beetles.push(new Beetle(this.x, this.y));
+        const coin = new Coin(this.x, this.y, this.coinType);
+        coin.value = this.coinValue;
+        coins.push(coin);
         spawnParticles(this.x, this.y, 'sparkle', 3);
-        this.coinTimer = 15;
+        const [minInterval, maxInterval] = FISH_SPECIES.crab.coinDropInterval;
+        this.coinTimer = minInterval + Math.random() * (maxInterval - minInterval);
       }
     }
 
@@ -2263,19 +2491,33 @@ class Guppycruncher {
     this.x = Math.max(tankManager.padding, Math.min(tankManager.bounds.right - tankManager.padding, this.x));
   }
 
-  findSmallGuppy() {
+  findTrout() {
     let nearest = null;
     let nearestDist = Infinity;
 
+    // Search trouts array (new sprite-based fish)
+    for (const trout of trouts) {
+      if (trout.state === 'dead' || trout.state === 'dying') continue;
+
+      const dx = trout.x - this.x;
+      const dy = trout.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      // Only target fish above and within range
+      if (dy < 0 && dist < nearestDist && dist < 200) {
+        nearestDist = dist;
+        nearest = trout;
+      }
+    }
+
+    // Also check legacy guppies array for backward compatibility
     for (const guppy of guppies) {
-      if (guppy.stage !== 'small') continue;
       if (guppy.state === 'dead' || guppy.state === 'dying') continue;
 
       const dx = guppy.x - this.x;
       const dy = guppy.y - this.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      // Only target guppies above and within range
       if (dy < 0 && dist < nearestDist && dist < 200) {
         nearestDist = dist;
         nearest = guppy;
@@ -2297,152 +2539,31 @@ class Guppycruncher {
       ctx.scale(-1, 1);
     }
 
-    // Color based on state
-    let bodyColor = '#ff6347'; // Tomato red
-    let shellColor = '#cd5c5c'; // Indian red
-    if (this.state === 'dying') {
-      bodyColor = '#808080';
-      shellColor = '#606060';
-    } else if (this.state === 'hunting') {
-      bodyColor = '#ff4500'; // Orange red when hunting
-      shellColor = '#dc143c';
-    } else if (this.hunger > 60) {
-      bodyColor = '#8b0000'; // Dark red when hungry
-      shellColor = '#800000';
-    }
-
-    // Legs (6 total, animated)
-    ctx.strokeStyle = bodyColor;
-    ctx.lineWidth = 4;
-    for (let i = 0; i < 3; i++) {
-      const legOffset = (i - 1) * this.size * 0.4;
-      const legWiggle = Math.sin(this.legPhase + i * 1.2) * 5;
-
-      // Left leg
+    // Draw sprite if loaded
+    const sprite = imageCache[this.species];
+    if (sprite) {
+      ctx.drawImage(sprite, -this.size / 2, -this.size / 2, this.size, this.size);
+    } else {
+      // Fallback: draw a simple colored crab shape
+      let bodyColor = this.state === 'dying' ? '#808080' :
+                      this.state === 'hunting' ? '#ff4500' :
+                      this.hunger > 60 ? '#8b0000' : '#ff6347';
+      ctx.fillStyle = bodyColor;
       ctx.beginPath();
-      ctx.moveTo(legOffset - this.size * 0.3, 0);
-      ctx.lineTo(legOffset - this.size * 0.6 - legWiggle, this.size * 0.3);
-      ctx.lineTo(legOffset - this.size * 0.5 - legWiggle, this.size * 0.5);
-      ctx.stroke();
-
-      // Right leg
-      ctx.beginPath();
-      ctx.moveTo(legOffset + this.size * 0.3, 0);
-      ctx.lineTo(legOffset + this.size * 0.6 + legWiggle, this.size * 0.3);
-      ctx.lineTo(legOffset + this.size * 0.5 + legWiggle, this.size * 0.5);
-      ctx.stroke();
+      ctx.ellipse(0, -this.size * 0.2, this.size * 0.5, this.size * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Simple claws
+      ctx.fillRect(-this.size * 0.6, -this.size * 0.1, 15, 8);
+      ctx.fillRect(this.size * 0.6 - 15, -this.size * 0.1, 15, 8);
     }
-
-    // Shell body
-    ctx.fillStyle = shellColor;
-    ctx.beginPath();
-    ctx.ellipse(0, -this.size * 0.2, this.size * 0.8, this.size * 0.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Shell segments
-    ctx.strokeStyle = bodyColor;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, -this.size * 0.2, this.size * 0.5, Math.PI * 0.2, Math.PI * 0.8);
-    ctx.stroke();
-
-    // Claws
-    const clawAngle = 0.3 + this.clawOpen * 0.4;
-    ctx.fillStyle = bodyColor;
-
-    // Left claw
-    ctx.save();
-    ctx.translate(-this.size * 0.7, -this.size * 0.1);
-    ctx.rotate(-0.3);
-    // Claw arm
-    ctx.fillRect(-15, -4, 20, 8);
-    // Claw pincer (top)
-    ctx.save();
-    ctx.rotate(-clawAngle);
-    ctx.beginPath();
-    ctx.moveTo(-18, 0);
-    ctx.lineTo(-30, -8);
-    ctx.lineTo(-25, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-    // Claw pincer (bottom)
-    ctx.save();
-    ctx.rotate(clawAngle);
-    ctx.beginPath();
-    ctx.moveTo(-18, 0);
-    ctx.lineTo(-30, 8);
-    ctx.lineTo(-25, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-    ctx.restore();
-
-    // Right claw
-    ctx.save();
-    ctx.translate(this.size * 0.7, -this.size * 0.1);
-    ctx.rotate(0.3);
-    // Claw arm
-    ctx.fillRect(-5, -4, 20, 8);
-    // Claw pincer (top)
-    ctx.save();
-    ctx.rotate(clawAngle);
-    ctx.beginPath();
-    ctx.moveTo(18, 0);
-    ctx.lineTo(30, -8);
-    ctx.lineTo(25, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-    // Claw pincer (bottom)
-    ctx.save();
-    ctx.rotate(-clawAngle);
-    ctx.beginPath();
-    ctx.moveTo(18, 0);
-    ctx.lineTo(30, 8);
-    ctx.lineTo(25, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-    ctx.restore();
-
-    // Eye stalks
-    ctx.strokeStyle = bodyColor;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(-this.size * 0.2, -this.size * 0.5);
-    ctx.lineTo(-this.size * 0.25, -this.size * 0.9);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(this.size * 0.2, -this.size * 0.5);
-    ctx.lineTo(this.size * 0.25, -this.size * 0.9);
-    ctx.stroke();
-
-    // Eyes
-    ctx.fillStyle = '#000';
-    ctx.beginPath();
-    ctx.arc(-this.size * 0.25, -this.size * 0.9, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(this.size * 0.25, -this.size * 0.9, 5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Eye shine
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(-this.size * 0.27, -this.size * 0.92, 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(this.size * 0.23, -this.size * 0.92, 2, 0, Math.PI * 2);
-    ctx.fill();
 
     ctx.restore();
 
     // Label
-    ctx.fillStyle = '#ff6347';
-    ctx.font = 'bold 10px Arial';
+    ctx.fillStyle = '#4caf50';
+    ctx.font = 'bold 9px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('CRUNCHER', this.x, this.y + this.size * 0.7 + 12);
+    ctx.fillText('CRAB', this.x, this.y + this.size * 0.7 + 12);
 
     // Hunger warning
     if (this.hunger > 60 && this.state !== 'dying') {
@@ -2451,11 +2572,668 @@ class Guppycruncher {
       ctx.fillText('HUNGRY!', this.x, this.y - this.size - 10);
     }
 
-    // Beetle ready indicator
+    // Coin ready indicator
     if (this.hunger < 50 && this.coinTimer < 3) {
       ctx.fillStyle = '#3d2b1f';
       ctx.font = 'bold 10px Arial';
       ctx.fillText('\u2022', this.x, this.y - this.size * 0.8);
+    }
+  }
+}
+
+// Alias for backward compatibility
+const Guppycruncher = Crab;
+
+// ============================================
+// WardenLamprey Class (Attacks Aliens - Sprite Based)
+// ============================================
+class WardenLamprey {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.targetX = x;
+    this.targetY = y;
+    this.species = 'warden_lamprey';
+    const sizeConfig = SIZE_CONFIG[FISH_SPECIES.warden_lamprey.size];
+    this.size = sizeConfig.pixelSize;
+    this.speed = sizeConfig.speed + 30; // Fast when attacking
+    this.state = 'wandering';
+    this.facingLeft = false;
+    this.wanderTimer = 0;
+
+    // Damage dealing
+    this.damagePerSecond = FISH_SPECIES.warden_lamprey.damagePerSecond;
+    this.attackTimer = 0;
+    this.attackCooldown = 0.5; // Attack every 0.5 seconds for 1 damage = 2 dps
+
+    // No hunger - this fish doesn't eat
+    this.hunger = 0;
+  }
+
+  update(dt) {
+    // PRIORITY: Attack alien if present
+    if (alien && !alien.dead && !alien.entering) {
+      this.state = 'attacking';
+      this.targetX = alien.x;
+      this.targetY = alien.y;
+
+      // Check if close enough to attack
+      const dx = alien.x - this.x;
+      const dy = alien.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < this.size + alien.size * 0.5) {
+        // Attack the alien!
+        this.attackTimer -= dt;
+        if (this.attackTimer <= 0) {
+          alien.takeDamage();
+          spawnParticles(alien.x, alien.y, 'blood', 3);
+          this.attackTimer = this.attackCooldown;
+        }
+      }
+    } else {
+      // No alien - wander peacefully
+      this.state = 'wandering';
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        const newPos = tankManager.getRandomPosition();
+        this.targetX = newPos.x;
+        this.targetY = newPos.y;
+        this.wanderTimer = 2 + Math.random() * 2;
+      }
+    }
+
+    // Movement
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 5) {
+      const currentSpeed = this.state === 'attacking' ? this.speed * 1.5 : this.speed;
+      this.x += (dx / dist) * currentSpeed * dt;
+      this.y += (dy / dist) * currentSpeed * dt;
+      this.facingLeft = dx < 0;
+    }
+
+    const clamped = tankManager.clampToTank(this.x, this.y);
+    this.x = clamped.x;
+    this.y = clamped.y;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.facingLeft) {
+      ctx.scale(-1, 1);
+    }
+
+    // Draw sprite if loaded
+    const sprite = imageCache[this.species];
+    if (sprite) {
+      ctx.drawImage(sprite, -this.size / 2, -this.size / 2, this.size, this.size);
+    } else {
+      // Fallback: draw a simple eel-like shape
+      let bodyColor = this.state === 'attacking' ? '#ff4500' : '#4a0080';
+      ctx.fillStyle = bodyColor;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, this.size / 2, this.size / 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Teeth
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(this.size / 2 - 8, -3, 8, 2);
+      ctx.fillRect(this.size / 2 - 8, 1, 8, 2);
+    }
+
+    ctx.restore();
+
+    // Label
+    ctx.fillStyle = RARITY_COLORS.relic;
+    ctx.font = 'bold 9px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('WARDEN', this.x, this.y + this.size / 2 + 12);
+
+    // Attack indicator
+    if (this.state === 'attacking') {
+      ctx.fillStyle = '#ff0000';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('ATTACKING!', this.x, this.y - this.size / 2 - 10);
+    }
+  }
+}
+
+// ============================================
+// Seeker Class (Auto-Collects Coins - Sprite Based)
+// ============================================
+class Seeker {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.targetX = x;
+    this.targetY = y;
+    this.species = 'seeker';
+    const sizeConfig = SIZE_CONFIG[FISH_SPECIES.seeker.size];
+    this.size = sizeConfig.pixelSize;
+    this.speed = sizeConfig.speed + 40; // Fast coin collector
+    this.state = 'wandering';
+    this.facingLeft = false;
+    this.wanderTimer = 0;
+
+    // Coin collection
+    this.collectRadius = FISH_SPECIES.seeker.collectRadius;
+    this.targetCoin = null;
+
+    // No hunger - this fish doesn't eat
+    this.hunger = 0;
+  }
+
+  update(dt) {
+    // Look for coins to collect
+    this.targetCoin = this.findNearestCoin();
+
+    if (this.targetCoin) {
+      this.state = 'collecting';
+      this.targetX = this.targetCoin.x;
+      this.targetY = this.targetCoin.y;
+
+      // Check if close enough to collect
+      const dx = this.targetCoin.x - this.x;
+      const dy = this.targetCoin.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < this.size / 2 + 10) {
+        // Collect the coin!
+        gold += this.targetCoin.value;
+        totalEarned += this.targetCoin.value;
+        updateGoldDisplay();
+        sound.play('coin');
+        spawnParticles(this.targetCoin.x, this.targetCoin.y, 'coin_sparkle', 5);
+        this.targetCoin.collected = true;
+        this.targetCoin = null;
+      }
+    } else {
+      // No coins nearby - wander
+      this.state = 'wandering';
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        const newPos = tankManager.getRandomPosition();
+        this.targetX = newPos.x;
+        this.targetY = newPos.y;
+        this.wanderTimer = 2 + Math.random() * 2;
+      }
+    }
+
+    // Movement
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 5) {
+      const currentSpeed = this.state === 'collecting' ? this.speed * 1.3 : this.speed;
+      this.x += (dx / dist) * currentSpeed * dt;
+      this.y += (dy / dist) * currentSpeed * dt;
+      this.facingLeft = dx < 0;
+    }
+
+    const clamped = tankManager.clampToTank(this.x, this.y);
+    this.x = clamped.x;
+    this.y = clamped.y;
+  }
+
+  findNearestCoin() {
+    let nearest = null;
+    let nearestDist = this.collectRadius;
+
+    for (const coin of coins) {
+      if (coin.collected) continue;
+      const dx = coin.x - this.x;
+      const dy = coin.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = coin;
+      }
+    }
+
+    // Also check beetles
+    for (const beetle of beetles) {
+      if (beetle.collected) continue;
+      const dx = beetle.x - this.x;
+      const dy = beetle.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = beetle;
+      }
+    }
+
+    return nearest;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.facingLeft) {
+      ctx.scale(-1, 1);
+    }
+
+    // Draw sprite if loaded
+    const sprite = imageCache[this.species];
+    if (sprite) {
+      ctx.drawImage(sprite, -this.size / 2, -this.size / 2, this.size, this.size);
+    } else {
+      // Fallback: draw a simple fish shape with eye
+      let bodyColor = this.state === 'collecting' ? '#ffd700' : '#ff9800';
+      ctx.fillStyle = bodyColor;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, this.size / 2, this.size / 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Big eye
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(this.size / 4, -5, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(this.size / 4 + 2, -5, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    // Label
+    ctx.fillStyle = RARITY_COLORS.giga;
+    ctx.font = 'bold 9px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('SEEKER', this.x, this.y + this.size / 2 + 12);
+
+    // Collection indicator
+    if (this.state === 'collecting') {
+      ctx.fillStyle = '#ffd700';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('$', this.x, this.y - this.size / 2 - 5);
+    }
+  }
+}
+
+// ============================================
+// Anemone Class (Heals Nearby Fish - Sprite Based)
+// ============================================
+class Anemone {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.targetX = x;
+    this.targetY = y;
+    this.species = 'anemone';
+    const sizeConfig = SIZE_CONFIG[FISH_SPECIES.anemone.size];
+    this.size = sizeConfig.pixelSize;
+    this.speed = 15; // Very slow - almost stationary
+    this.state = 'healing';
+    this.facingLeft = false;
+    this.wanderTimer = 0;
+
+    // Healing
+    this.healRate = FISH_SPECIES.anemone.healRate;
+    this.healRadius = FISH_SPECIES.anemone.healRadius;
+
+    // Animation
+    this.pulsePhase = 0;
+
+    // No hunger - this creature doesn't eat
+    this.hunger = 0;
+  }
+
+  update(dt) {
+    // Pulse animation
+    this.pulsePhase += dt * 2;
+
+    // Heal nearby fish
+    this.healNearbyFish(dt);
+
+    // Very slow wandering
+    this.wanderTimer -= dt;
+    if (this.wanderTimer <= 0) {
+      const newPos = tankManager.getRandomPosition();
+      this.targetX = newPos.x;
+      this.targetY = newPos.y;
+      this.wanderTimer = 5 + Math.random() * 5; // Long intervals between movements
+    }
+
+    // Movement (very slow)
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 10) {
+      this.x += (dx / dist) * this.speed * dt;
+      this.y += (dy / dist) * this.speed * dt;
+      this.facingLeft = dx < 0;
+    }
+
+    const clamped = tankManager.clampToTank(this.x, this.y);
+    this.x = clamped.x;
+    this.y = clamped.y;
+  }
+
+  healNearbyFish(dt) {
+    const healAmount = this.healRate * dt;
+
+    // Heal trouts
+    for (const fish of trouts) {
+      if (fish.state === 'dead' || fish.state === 'dying') continue;
+      const dx = fish.x - this.x;
+      const dy = fish.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < this.healRadius) {
+        fish.hunger = Math.max(0, fish.hunger - healAmount);
+      }
+    }
+
+    // Heal legacy guppies
+    for (const fish of guppies) {
+      if (fish.state === 'dead' || fish.state === 'dying') continue;
+      const dx = fish.x - this.x;
+      const dy = fish.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < this.healRadius) {
+        fish.hunger = Math.max(0, fish.hunger - healAmount);
+      }
+    }
+
+    // Heal skellfins
+    for (const fish of skellfins) {
+      if (fish.state === 'dead' || fish.state === 'dying') continue;
+      const dx = fish.x - this.x;
+      const dy = fish.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < this.healRadius) {
+        fish.hunger = Math.max(0, fish.hunger - healAmount);
+      }
+    }
+
+    // Heal legacy carnivores
+    for (const fish of carnivores) {
+      if (fish.state === 'dead' || fish.state === 'dying') continue;
+      const dx = fish.x - this.x;
+      const dy = fish.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < this.healRadius) {
+        fish.hunger = Math.max(0, fish.hunger - healAmount);
+      }
+    }
+
+    // Heal breeders
+    for (const fish of breeders) {
+      if (fish.state === 'dead' || fish.state === 'dying') continue;
+      const dx = fish.x - this.x;
+      const dy = fish.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < this.healRadius) {
+        fish.hunger = Math.max(0, fish.hunger - healAmount);
+      }
+    }
+
+    // Heal geotles
+    for (const fish of geotles) {
+      if (fish.state === 'dead' || fish.state === 'dying') continue;
+      const dx = fish.x - this.x;
+      const dy = fish.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < this.healRadius) {
+        fish.hunger = Math.max(0, fish.hunger - healAmount);
+      }
+    }
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    // Pulsing effect
+    const pulse = 1 + Math.sin(this.pulsePhase) * 0.1;
+
+    // Draw sprite if loaded
+    const sprite = imageCache[this.species];
+    if (sprite) {
+      const drawSize = this.size * pulse;
+      ctx.drawImage(sprite, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+    } else {
+      // Fallback: draw a simple anemone shape
+      ctx.fillStyle = '#ff69b4';
+      // Tentacles
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        const tentacleLen = this.size * 0.4 * pulse;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(angle) * tentacleLen, Math.sin(angle) * tentacleLen);
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = '#ff69b4';
+        ctx.stroke();
+      }
+      // Center body
+      ctx.fillStyle = '#ff1493';
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size / 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    // Healing radius indicator (subtle)
+    ctx.strokeStyle = 'rgba(255, 105, 180, 0.2)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.healRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Label
+    ctx.fillStyle = RARITY_COLORS.giga;
+    ctx.font = 'bold 9px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('ANEMONE', this.x, this.y + this.size / 2 + 12);
+
+    // Healing indicator
+    ctx.fillStyle = '#ff69b4';
+    ctx.font = 'bold 12px Arial';
+    ctx.fillText('+', this.x, this.y - this.size / 2 - 5);
+  }
+}
+
+// ============================================
+// Geotle Class (Spawns Baby Trout - Sprite Based)
+// ============================================
+class Geotle {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.targetX = x;
+    this.targetY = y;
+    this.species = 'geotle';
+    const sizeConfig = SIZE_CONFIG[FISH_SPECIES.geotle.size];
+    this.size = sizeConfig.pixelSize;
+    this.speed = sizeConfig.speed;
+    this.hunger = 0;
+    this.state = 'wandering';
+    this.facingLeft = false;
+    this.wanderTimer = 0;
+
+    // Death animation
+    this.deathTimer = 0;
+
+    // Spawning timer - spawns baby trout every 25 seconds
+    this.spawnInterval = FISH_SPECIES.geotle.spawnInterval;
+    this.spawnTimer = this.spawnInterval;
+  }
+
+  update(dt) {
+    // Handle dying state
+    if (this.state === 'dying') {
+      this.deathTimer += dt;
+      this.y -= 25 * dt;
+      if (this.y < tankManager.padding || this.deathTimer > 3) {
+        this.state = 'dead';
+      }
+      return;
+    }
+
+    // Hunger increases slowly
+    this.hunger += dt * 4;
+
+    if (this.hunger >= 100) {
+      this.state = 'dying';
+      stats.totalFishLost++;
+      sound.play('death');
+      spawnParticles(this.x, this.y, 'bubble', 5);
+      return;
+    }
+
+    // Spawn timer - only spawns when not too hungry
+    this.spawnTimer -= dt;
+    if (this.spawnTimer <= 0 && this.hunger < 70) {
+      // Spawn a new baby trout!
+      const offsetX = (Math.random() - 0.5) * 30;
+      const offsetY = (Math.random() - 0.5) * 30;
+      trouts.push(new Trout(this.x + offsetX, this.y + offsetY));
+      sound.play('evolve');
+      spawnParticles(this.x, this.y, 'sparkle', 8);
+      this.spawnTimer = this.spawnInterval;
+    }
+
+    // Seek pellets when hungry
+    if (this.hunger > 50) {
+      this.state = 'hungry';
+      const nearestPellet = this.findNearestPellet();
+      if (nearestPellet) {
+        this.targetX = nearestPellet.x;
+        this.targetY = nearestPellet.y;
+      }
+    } else {
+      this.state = 'wandering';
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        const newPos = tankManager.getRandomPosition();
+        this.targetX = newPos.x;
+        this.targetY = newPos.y;
+        this.wanderTimer = 3 + Math.random() * 3;
+      }
+    }
+
+    // Movement
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 5) {
+      // Apply prestige speed bonus
+      const baseSpeed = this.hunger > 50 ? this.speed * 1.3 : this.speed;
+      const currentSpeed = baseSpeed * getPrestigeBonus('speed');
+      this.x += (dx / dist) * currentSpeed * dt;
+      this.y += (dy / dist) * currentSpeed * dt;
+      this.facingLeft = dx < 0;
+    }
+
+    const clamped = tankManager.clampToTank(this.x, this.y);
+    this.x = clamped.x;
+    this.y = clamped.y;
+
+    this.checkPelletCollision();
+  }
+
+  findNearestPellet() {
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const pellet of pellets) {
+      const dx = pellet.x - this.x;
+      const dy = pellet.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = pellet;
+      }
+    }
+    return nearest;
+  }
+
+  checkPelletCollision() {
+    // Satiation cap - ignore pellets when full (hunger < 10)
+    if (this.hunger < 10) return;
+
+    for (let i = pellets.length - 1; i >= 0; i--) {
+      const pellet = pellets[i];
+      const dx = pellet.x - this.x;
+      const dy = pellet.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < this.size + pellet.size) {
+        pellets.splice(i, 1);
+        this.hunger = pellet.upgraded ? -25 : 0;
+        this.state = 'wandering';
+        break;
+      }
+    }
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.state === 'dying') {
+      ctx.rotate(Math.PI);
+      ctx.globalAlpha = Math.max(0, 1 - this.deathTimer / 3);
+    }
+
+    if (this.facingLeft) {
+      ctx.scale(-1, 1);
+    }
+
+    // Draw sprite if loaded
+    const sprite = imageCache[this.species];
+    if (sprite) {
+      ctx.drawImage(sprite, -this.size / 2, -this.size / 2, this.size, this.size);
+    } else {
+      // Fallback: draw a turtle-like shape
+      let bodyColor = this.state === 'dying' ? '#808080' :
+                      this.hunger > 75 ? '#ff0000' :
+                      this.hunger > 50 ? '#32cd32' : '#228b22';
+      // Shell
+      ctx.fillStyle = '#8b4513';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, this.size / 2, this.size / 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Head
+      ctx.fillStyle = bodyColor;
+      ctx.beginPath();
+      ctx.arc(this.size / 3, 0, this.size / 5, 0, Math.PI * 2);
+      ctx.fill();
+      // Flippers
+      ctx.fillRect(-this.size / 3, -this.size / 3, 15, 10);
+      ctx.fillRect(-this.size / 3, this.size / 3 - 10, 15, 10);
+    }
+
+    ctx.restore();
+
+    // Label
+    ctx.fillStyle = RARITY_COLORS.giga;
+    ctx.font = 'bold 9px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('GEOTLE', this.x, this.y + this.size / 2 + 12);
+
+    // Spawn ready indicator
+    if (this.spawnTimer < 5 && this.state !== 'dying') {
+      ctx.fillStyle = '#ffd700';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('Ready!', this.x, this.y - this.size / 2 - 10);
+    }
+
+    // Hunger warning
+    if (this.hunger > 60 && this.state !== 'dying') {
+      ctx.fillStyle = this.hunger > 80 ? '#ff0000' : '#ffaa00';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('HUNGRY!', this.x, this.y - this.size / 2 - 25);
     }
   }
 }
@@ -2508,6 +3286,7 @@ class Beetlemuncher {
 
     if (this.hunger >= 100) {
       this.state = 'dying';
+      stats.totalFishLost++;
       sound.play('death');
       spawnParticles(this.x, this.y, 'bubble', 6);
       return;
@@ -3222,6 +4001,7 @@ class Sylvester {
 
   die() {
     this.dead = true;
+    stats.aliensDefeated++;
     sound.play('victory');
     spawnParticles(this.x, this.y, 'sparkle', 25);
     // Drop 5 gold coins as reward
@@ -3347,6 +4127,886 @@ class Sylvester {
 }
 
 // ============================================
+// Balrog - Tougher alien (100 HP), never gets full
+// ============================================
+class Balrog {
+  constructor() {
+    // Spawn from random edge
+    const edge = Math.floor(Math.random() * 4);
+    const bounds = tankManager.bounds;
+    const padding = tankManager.padding;
+
+    switch (edge) {
+      case 0:
+        this.x = padding + Math.random() * (bounds.right - padding * 2);
+        this.y = -60;
+        break;
+      case 1:
+        this.x = bounds.right + 60;
+        this.y = padding + Math.random() * (bounds.bottom - padding * 2);
+        break;
+      case 2:
+        this.x = padding + Math.random() * (bounds.right - padding * 2);
+        this.y = bounds.bottom + 60;
+        break;
+      case 3:
+        this.x = -60;
+        this.y = padding + Math.random() * (bounds.bottom - padding * 2);
+        break;
+    }
+
+    this.targetX = bounds.right / 2;
+    this.targetY = bounds.bottom / 2;
+    this.speed = 60;  // Slower than Sylvester
+    this.size = 65;   // Larger
+    this.health = 100;
+    this.maxHealth = 100;
+    this.dead = false;
+    this.facingLeft = false;
+    this.type = 'balrog';
+
+    this.wobble = 0;
+    this.hurtTimer = 0;
+    this.entering = true;
+    this.entryTimer = 0;
+  }
+
+  update(dt) {
+    this.wobble += dt * 4;
+    this.hurtTimer = Math.max(0, this.hurtTimer - dt);
+
+    if (this.entering) {
+      this.entryTimer += dt;
+      const targetPos = tankManager.getRandomPosition();
+      this.targetX = targetPos.x;
+      this.targetY = targetPos.y;
+
+      const dx = this.targetX - this.x;
+      const dy = this.targetY - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > 10) {
+        this.x += (dx / dist) * this.speed * 2 * dt;
+        this.y += (dy / dist) * this.speed * 2 * dt;
+      }
+
+      if (this.entryTimer > 1 && tankManager.isWithinBounds(this.x, this.y)) {
+        this.entering = false;
+      }
+      return;
+    }
+
+    // Find nearest fish to hunt (same as Sylvester)
+    const target = this.findNearestFish();
+    if (target) {
+      this.targetX = target.x;
+      this.targetY = target.y;
+
+      const dx = target.x - this.x;
+      const dy = target.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < this.size * 0.5 + target.size) {
+        // Balrog never gets full - keeps eating!
+        if (target.beingEatenTimer !== undefined) {
+          target.beingEatenTimer += dt;
+          if (target.beingEatenTimer >= target.beingEatenDuration) {
+            if (angie && angie.canRevive()) {
+              angie.revive(target);
+            } else {
+              target.state = 'dying';
+              target.deathTimer = 0;
+              sound.play('death');
+              spawnParticles(target.x, target.y, 'blood', 10);
+              spawnParticles(target.x, target.y, 'bubble', 5);
+            }
+          }
+        } else {
+          if (angie && angie.canRevive()) {
+            angie.revive(target);
+          } else {
+            target.state = 'dying';
+            target.deathTimer = 0;
+            sound.play('death');
+            spawnParticles(target.x, target.y, 'blood', 10);
+            spawnParticles(target.x, target.y, 'bubble', 5);
+          }
+        }
+      }
+    }
+
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 5) {
+      this.x += (dx / dist) * this.speed * dt;
+      this.y += (dy / dist) * this.speed * dt;
+      this.facingLeft = dx < 0;
+    }
+
+    this.x = Math.max(-20, Math.min(tankManager.bounds.right + 20, this.x));
+    this.y = Math.max(-20, Math.min(tankManager.bounds.bottom + 20, this.y));
+  }
+
+  findNearestFish() {
+    let nearest = null;
+    let nearestDist = Infinity;
+
+    // Check all fish types
+    const allFish = [...ultravores, ...mobiuses, ...guppies, ...trouts, ...carnivores,
+                     ...skellfins, ...breeders, ...starcatchers, ...guppycrunchers,
+                     ...beetlemunchers, ...geotles];
+
+    for (const fish of allFish) {
+      if (fish.state === 'dead' || fish.state === 'dying') continue;
+      const dx = fish.x - this.x;
+      const dy = fish.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = fish;
+      }
+    }
+    return nearest;
+  }
+
+  takeDamage() {
+    this.health--;
+    this.hurtTimer = 0.1;
+    if (this.health <= 0) {
+      this.die();
+    }
+  }
+
+  die() {
+    this.dead = true;
+    stats.aliensDefeated++;
+    sound.play('victory');
+    spawnParticles(this.x, this.y, 'sparkle', 30);
+    // Drop 8 gold coins as reward (more than Sylvester)
+    for (let i = 0; i < 8; i++) {
+      const offsetX = (Math.random() - 0.5) * 80;
+      const offsetY = (Math.random() - 0.5) * 80;
+      coins.push(new Coin(this.x + offsetX, this.y + offsetY, 'gold'));
+    }
+  }
+
+  isClicked(clickX, clickY) {
+    const dx = clickX - this.x;
+    const dy = clickY - this.y;
+    return Math.sqrt(dx * dx + dy * dy) < this.size;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.hurtTimer > 0) {
+      ctx.globalAlpha = 0.5 + Math.sin(this.hurtTimer * 50) * 0.5;
+    }
+
+    if (this.entering) {
+      ctx.globalAlpha = this.entryTimer;
+      const scale = 0.5 + this.entryTimer * 0.5;
+      ctx.scale(scale, scale);
+    }
+
+    if (this.facingLeft) {
+      ctx.scale(-1, 1);
+    }
+
+    const wobbleY = Math.sin(this.wobble) * 4;
+
+    // Body (dark red demon)
+    ctx.fillStyle = '#8b0000';
+    ctx.beginPath();
+    ctx.ellipse(0, wobbleY, this.size, this.size * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Horns
+    ctx.fillStyle = '#2f0000';
+    ctx.beginPath();
+    ctx.moveTo(-25, wobbleY - 40);
+    ctx.lineTo(-35, wobbleY - 70);
+    ctx.lineTo(-15, wobbleY - 45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(25, wobbleY - 40);
+    ctx.lineTo(35, wobbleY - 70);
+    ctx.lineTo(15, wobbleY - 45);
+    ctx.closePath();
+    ctx.fill();
+
+    // Fire aura effect
+    ctx.fillStyle = 'rgba(255, 100, 0, 0.3)';
+    for (let i = 0; i < 6; i++) {
+      const flameX = -30 + i * 12;
+      const flameY = Math.sin(this.wobble + i) * 8;
+      ctx.beginPath();
+      ctx.ellipse(flameX, this.size * 0.6 + flameY, 8, 15, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Eyes (fiery)
+    ctx.fillStyle = '#ff4500';
+    ctx.beginPath();
+    ctx.ellipse(-18, wobbleY - 10, 14, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(18, wobbleY - 10, 14, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pupils
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(-15, wobbleY - 8, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(21, wobbleY - 8, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Mouth with fangs
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(0, wobbleY + 20, 20, 0, Math.PI);
+    ctx.fill();
+
+    ctx.fillStyle = '#fff';
+    // Large fangs
+    ctx.beginPath();
+    ctx.moveTo(-15, wobbleY + 15);
+    ctx.lineTo(-12, wobbleY + 35);
+    ctx.lineTo(-9, wobbleY + 15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(9, wobbleY + 15);
+    ctx.lineTo(12, wobbleY + 35);
+    ctx.lineTo(15, wobbleY + 15);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+
+    // Health bar
+    if (!this.entering) {
+      const barWidth = 80;
+      const barHeight = 10;
+      const barX = this.x - barWidth / 2;
+      const barY = this.y - this.size - 20;
+
+      ctx.fillStyle = '#333';
+      ctx.fillRect(barX, barY, barWidth, barHeight);
+
+      const healthPercent = this.health / this.maxHealth;
+      ctx.fillStyle = '#ff4500';
+      ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(barX, barY, barWidth, barHeight);
+    }
+  }
+}
+
+// ============================================
+// Gus - Cannot be shot, must be fed 20 pellets
+// ============================================
+class Gus {
+  constructor() {
+    // Spawn from random edge
+    const edge = Math.floor(Math.random() * 4);
+    const bounds = tankManager.bounds;
+    const padding = tankManager.padding;
+
+    switch (edge) {
+      case 0:
+        this.x = padding + Math.random() * (bounds.right - padding * 2);
+        this.y = -50;
+        break;
+      case 1:
+        this.x = bounds.right + 50;
+        this.y = padding + Math.random() * (bounds.bottom - padding * 2);
+        break;
+      case 2:
+        this.x = padding + Math.random() * (bounds.right - padding * 2);
+        this.y = bounds.bottom + 50;
+        break;
+      case 3:
+        this.x = -50;
+        this.y = padding + Math.random() * (bounds.bottom - padding * 2);
+        break;
+    }
+
+    this.targetX = bounds.right / 2;
+    this.targetY = bounds.bottom / 2;
+    this.speed = 70;
+    this.size = 55;
+    this.pelletsEaten = 0;
+    this.pelletsNeeded = 20;
+    this.dead = false;
+    this.facingLeft = false;
+    this.type = 'gus';
+
+    this.wobble = 0;
+    this.entering = true;
+    this.entryTimer = 0;
+    this.bloatScale = 1;  // Grows as it eats
+  }
+
+  update(dt) {
+    this.wobble += dt * 5;
+
+    if (this.entering) {
+      this.entryTimer += dt;
+      const targetPos = tankManager.getRandomPosition();
+      this.targetX = targetPos.x;
+      this.targetY = targetPos.y;
+
+      const dx = this.targetX - this.x;
+      const dy = this.targetY - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > 10) {
+        this.x += (dx / dist) * this.speed * 2 * dt;
+        this.y += (dy / dist) * this.speed * 2 * dt;
+      }
+
+      if (this.entryTimer > 1 && tankManager.isWithinBounds(this.x, this.y)) {
+        this.entering = false;
+      }
+      return;
+    }
+
+    // Gus hunts fish AND eats pellets
+    const targetFish = this.findNearestFish();
+    const targetPellet = this.findNearestPellet();
+
+    // Prefer pellets if close
+    let target = null;
+    if (targetPellet && targetFish) {
+      const pelletDist = Math.sqrt((targetPellet.x - this.x) ** 2 + (targetPellet.y - this.y) ** 2);
+      const fishDist = Math.sqrt((targetFish.x - this.x) ** 2 + (targetFish.y - this.y) ** 2);
+      target = pelletDist < fishDist * 0.7 ? targetPellet : targetFish;
+    } else {
+      target = targetPellet || targetFish;
+    }
+
+    if (target) {
+      this.targetX = target.x;
+      this.targetY = target.y;
+
+      const dx = target.x - this.x;
+      const dy = target.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      // Check if reached target
+      if (dist < this.size * 0.5 * this.bloatScale + (target.size || 10)) {
+        if (target.eaten !== undefined) {
+          // It's a pellet
+          target.eaten = true;
+          this.eatPellet();
+        } else {
+          // It's a fish
+          if (angie && angie.canRevive()) {
+            angie.revive(target);
+          } else {
+            target.state = 'dying';
+            target.deathTimer = 0;
+            sound.play('death');
+            spawnParticles(target.x, target.y, 'blood', 10);
+          }
+        }
+      }
+    }
+
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 5) {
+      const currentSpeed = this.speed * (1 - this.pelletsEaten / this.pelletsNeeded * 0.5);  // Slows down as it bloats
+      this.x += (dx / dist) * currentSpeed * dt;
+      this.y += (dy / dist) * currentSpeed * dt;
+      this.facingLeft = dx < 0;
+    }
+
+    this.x = Math.max(-20, Math.min(tankManager.bounds.right + 20, this.x));
+    this.y = Math.max(-20, Math.min(tankManager.bounds.bottom + 20, this.y));
+  }
+
+  findNearestFish() {
+    let nearest = null;
+    let nearestDist = Infinity;
+
+    const allFish = [...guppies, ...trouts, ...carnivores, ...skellfins,
+                     ...breeders, ...starcatchers, ...beetlemunchers, ...geotles];
+
+    for (const fish of allFish) {
+      if (fish.state === 'dead' || fish.state === 'dying') continue;
+      const dx = fish.x - this.x;
+      const dy = fish.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = fish;
+      }
+    }
+    return nearest;
+  }
+
+  findNearestPellet() {
+    let nearest = null;
+    let nearestDist = Infinity;
+
+    for (const pellet of pellets) {
+      if (pellet.eaten) continue;
+      const dx = pellet.x - this.x;
+      const dy = pellet.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = pellet;
+      }
+    }
+    return nearest;
+  }
+
+  eatPellet() {
+    this.pelletsEaten++;
+    this.bloatScale = 1 + (this.pelletsEaten / this.pelletsNeeded) * 0.8;
+    sound.play('feed');
+    spawnParticles(this.x, this.y, 'bubble', 3);
+
+    if (this.pelletsEaten >= this.pelletsNeeded) {
+      this.explode();
+    }
+  }
+
+  explode() {
+    this.dead = true;
+    stats.aliensDefeated++;
+    sound.play('victory');
+    spawnParticles(this.x, this.y, 'sparkle', 40);
+    spawnParticles(this.x, this.y, 'blood', 20);
+    // Drop 10 gold coins
+    for (let i = 0; i < 10; i++) {
+      const offsetX = (Math.random() - 0.5) * 100;
+      const offsetY = (Math.random() - 0.5) * 100;
+      coins.push(new Coin(this.x + offsetX, this.y + offsetY, 'gold'));
+    }
+  }
+
+  takeDamage() {
+    // Gus cannot be damaged by clicking!
+  }
+
+  isClicked(clickX, clickY) {
+    // Always return false - Gus cannot be clicked to damage
+    return false;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.entering) {
+      ctx.globalAlpha = this.entryTimer;
+      const scale = 0.5 + this.entryTimer * 0.5;
+      ctx.scale(scale, scale);
+    }
+
+    // Apply bloat scale
+    ctx.scale(this.bloatScale, this.bloatScale);
+
+    if (this.facingLeft) {
+      ctx.scale(-1, 1);
+    }
+
+    const wobbleY = Math.sin(this.wobble) * 3;
+
+    // Body (green bloated creature)
+    const greenIntensity = Math.min(255, 100 + this.pelletsEaten * 8);
+    ctx.fillStyle = `rgb(${50 + this.pelletsEaten * 5}, ${greenIntensity}, 50)`;
+    ctx.beginPath();
+    ctx.ellipse(0, wobbleY, this.size, this.size * 0.9, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Spots
+    ctx.fillStyle = 'rgba(0, 100, 0, 0.5)';
+    for (let i = 0; i < 5; i++) {
+      const spotX = -20 + i * 10;
+      const spotY = -10 + Math.sin(i) * 15;
+      ctx.beginPath();
+      ctx.arc(spotX, wobbleY + spotY, 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Dopey eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(-15, wobbleY - 15, 15, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(15, wobbleY - 15, 15, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Cross-eyed pupils
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(-10, wobbleY - 15, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(10, wobbleY - 15, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Open mouth (always hungry)
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(0, wobbleY + 20, 18, 15, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Tongue
+    ctx.fillStyle = '#ff6b6b';
+    ctx.beginPath();
+    ctx.ellipse(0, wobbleY + 28, 8, 6, 0, 0, Math.PI);
+    ctx.fill();
+
+    ctx.restore();
+
+    // Pellet counter bar (instead of health bar)
+    if (!this.entering) {
+      const barWidth = 70;
+      const barHeight = 10;
+      const barX = this.x - barWidth / 2;
+      const barY = this.y - this.size * this.bloatScale - 20;
+
+      ctx.fillStyle = '#333';
+      ctx.fillRect(barX, barY, barWidth, barHeight);
+
+      const eatPercent = this.pelletsEaten / this.pelletsNeeded;
+      ctx.fillStyle = eatPercent > 0.8 ? '#ff0000' : '#00ff00';
+      ctx.fillRect(barX, barY, barWidth * eatPercent, barHeight);
+
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+      // Label
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 10px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${this.pelletsEaten}/${this.pelletsNeeded}`, this.x, barY - 3);
+    }
+  }
+}
+
+// ============================================
+// Missile - Fired by Destructor
+// ============================================
+class Missile {
+  constructor(x, y, targetFish) {
+    this.x = x;
+    this.y = y;
+    this.target = targetFish;
+    this.speed = 150;
+    this.size = 10;
+    this.health = 3;
+    this.dead = false;
+    this.trail = [];
+  }
+
+  update(dt) {
+    // Add trail
+    this.trail.push({ x: this.x, y: this.y, alpha: 1 });
+    if (this.trail.length > 10) this.trail.shift();
+
+    // Fade trail
+    for (const point of this.trail) {
+      point.alpha -= dt * 3;
+    }
+    this.trail = this.trail.filter(p => p.alpha > 0);
+
+    // Home toward target
+    if (this.target && this.target.state !== 'dying' && this.target.state !== 'dead') {
+      const dx = this.target.x - this.x;
+      const dy = this.target.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > 5) {
+        this.x += (dx / dist) * this.speed * dt;
+        this.y += (dy / dist) * this.speed * dt;
+      }
+
+      // Hit target
+      if (dist < this.size + (this.target.size || 20)) {
+        if (angie && angie.canRevive()) {
+          angie.revive(this.target);
+        } else {
+          this.target.state = 'dying';
+          this.target.deathTimer = 0;
+          sound.play('death');
+          spawnParticles(this.target.x, this.target.y, 'blood', 8);
+        }
+        this.dead = true;
+      }
+    } else {
+      // Lost target - continue in current direction then expire
+      this.dead = true;
+    }
+
+    // Off screen
+    if (this.x < -50 || this.x > tankManager.bounds.right + 50 ||
+        this.y < -50 || this.y > tankManager.bounds.bottom + 50) {
+      this.dead = true;
+    }
+  }
+
+  takeDamage() {
+    this.health--;
+    if (this.health <= 0) {
+      this.dead = true;
+      sound.play('hit');
+      spawnParticles(this.x, this.y, 'sparkle', 5);
+    }
+  }
+
+  isClicked(clickX, clickY) {
+    const dx = clickX - this.x;
+    const dy = clickY - this.y;
+    return Math.sqrt(dx * dx + dy * dy) < this.size + 10;  // Slightly larger hitbox
+  }
+
+  draw(ctx) {
+    // Draw trail
+    for (const point of this.trail) {
+      ctx.globalAlpha = point.alpha * 0.5;
+      ctx.fillStyle = '#ff4500';
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Missile body
+    ctx.fillStyle = '#ff0000';
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y, this.size, this.size * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Warhead
+    ctx.fillStyle = '#ffff00';
+    ctx.beginPath();
+    ctx.arc(this.x + 5, this.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Fins
+    ctx.fillStyle = '#8b0000';
+    ctx.beginPath();
+    ctx.moveTo(this.x - 8, this.y - 3);
+    ctx.lineTo(this.x - 15, this.y - 10);
+    ctx.lineTo(this.x - 8, this.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(this.x - 8, this.y + 3);
+    ctx.lineTo(this.x - 15, this.y + 10);
+    ctx.lineTo(this.x - 8, this.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+// ============================================
+// Destructor - Sits at bottom, fires homing missiles
+// ============================================
+class Destructor {
+  constructor() {
+    const bounds = tankManager.bounds;
+    this.x = bounds.right / 2;
+    this.y = bounds.bottom + 60;  // Start below screen
+    this.targetY = bounds.bottom - 30;  // Sit at bottom
+    this.speed = 30;
+    this.size = 70;
+    this.health = 75;
+    this.maxHealth = 75;
+    this.dead = false;
+    this.type = 'destructor';
+
+    this.wobble = 0;
+    this.hurtTimer = 0;
+    this.entering = true;
+    this.entryTimer = 0;
+    this.fireTimer = 3;  // Fire every 3 seconds
+    this.fireRate = 3;
+  }
+
+  update(dt, missiles) {
+    this.wobble += dt * 3;
+    this.hurtTimer = Math.max(0, this.hurtTimer - dt);
+
+    if (this.entering) {
+      this.entryTimer += dt;
+      const dy = this.targetY - this.y;
+
+      if (Math.abs(dy) > 5) {
+        this.y += Math.sign(dy) * this.speed * dt;
+      } else {
+        this.entering = false;
+      }
+      return;
+    }
+
+    // Fire missiles at fish
+    this.fireTimer -= dt;
+    if (this.fireTimer <= 0) {
+      this.fireTimer = this.fireRate;
+      const target = this.findTargetFish();
+      if (target) {
+        missiles.push(new Missile(this.x, this.y - 20, target));
+        sound.play('alien');  // Missile launch sound
+        spawnParticles(this.x, this.y - 20, 'sparkle', 5);
+      }
+    }
+
+    // Slight horizontal movement
+    this.x += Math.sin(this.wobble * 0.5) * 20 * dt;
+    this.x = Math.max(50, Math.min(tankManager.bounds.right - 50, this.x));
+  }
+
+  findTargetFish() {
+    const allFish = [...guppies, ...trouts, ...carnivores, ...skellfins,
+                     ...ultravores, ...mobiuses, ...breeders, ...geotles,
+                     ...starcatchers, ...beetlemunchers];
+
+    const aliveFish = allFish.filter(f => f.state !== 'dead' && f.state !== 'dying');
+    if (aliveFish.length === 0) return null;
+
+    // Target random fish
+    return aliveFish[Math.floor(Math.random() * aliveFish.length)];
+  }
+
+  takeDamage() {
+    this.health--;
+    this.hurtTimer = 0.1;
+    if (this.health <= 0) {
+      this.die();
+    }
+  }
+
+  die() {
+    this.dead = true;
+    stats.aliensDefeated++;
+    sound.play('victory');
+    spawnParticles(this.x, this.y, 'sparkle', 35);
+    // Drop 7 gold coins
+    for (let i = 0; i < 7; i++) {
+      const offsetX = (Math.random() - 0.5) * 80;
+      const offsetY = (Math.random() - 0.5) * 40;
+      coins.push(new Coin(this.x + offsetX, this.y + offsetY - 30, 'gold'));
+    }
+  }
+
+  isClicked(clickX, clickY) {
+    const dx = clickX - this.x;
+    const dy = clickY - this.y;
+    return Math.sqrt(dx * dx + dy * dy) < this.size;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.hurtTimer > 0) {
+      ctx.globalAlpha = 0.5 + Math.sin(this.hurtTimer * 50) * 0.5;
+    }
+
+    if (this.entering) {
+      ctx.globalAlpha = Math.min(1, this.entryTimer);
+    }
+
+    const wobbleX = Math.sin(this.wobble) * 2;
+
+    // Tank treads
+    ctx.fillStyle = '#333';
+    ctx.fillRect(-35 + wobbleX, 15, 25, 20);
+    ctx.fillRect(10 + wobbleX, 15, 25, 20);
+
+    // Tread details
+    ctx.fillStyle = '#222';
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(-33 + i * 6 + wobbleX, 17, 4, 16);
+      ctx.fillRect(12 + i * 6 + wobbleX, 17, 4, 16);
+    }
+
+    // Main body (metal dome)
+    ctx.fillStyle = '#4a4a4a';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size * 0.7, this.size * 0.5, 0, Math.PI, 0);
+    ctx.fill();
+
+    ctx.fillStyle = '#666';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size * 0.7, 15, 0, 0, Math.PI);
+    ctx.fill();
+
+    // Cannon
+    ctx.fillStyle = '#333';
+    ctx.fillRect(-8, -40, 16, 35);
+
+    // Cannon tip
+    ctx.fillStyle = '#ff4500';
+    ctx.beginPath();
+    ctx.arc(0, -45, 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eye/sensor
+    ctx.fillStyle = '#ff0000';
+    ctx.beginPath();
+    ctx.arc(0, -10, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(0, -10, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rivets
+    ctx.fillStyle = '#888';
+    for (let i = 0; i < 5; i++) {
+      const angle = Math.PI + (i / 4) * Math.PI;
+      const rx = Math.cos(angle) * this.size * 0.55;
+      const ry = Math.sin(angle) * this.size * 0.35;
+      ctx.beginPath();
+      ctx.arc(rx, ry - 5, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    // Health bar
+    if (!this.entering) {
+      const barWidth = 80;
+      const barHeight = 10;
+      const barX = this.x - barWidth / 2;
+      const barY = this.y - this.size - 10;
+
+      ctx.fillStyle = '#333';
+      ctx.fillRect(barX, barY, barWidth, barHeight);
+
+      const healthPercent = this.health / this.maxHealth;
+      ctx.fillStyle = '#666';
+      ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(barX, barY, barWidth, barHeight);
+    }
+  }
+}
+
+// ============================================
 // Stinky the Snail (Pet)
 // ============================================
 class Stinky {
@@ -3379,6 +5039,7 @@ class Stinky {
       if (Math.abs(dx) < this.size * 0.5) {
         // Collect the coin!
         gold += floorCoin.value;
+        totalEarned += floorCoin.value;
         floorCoin.collected = true;
         sound.play('coin');
         spawnParticles(floorCoin.x, floorCoin.y, 'coin_sparkle', 6);
@@ -4080,6 +5741,7 @@ class Clyde {
       if (dist < this.size) {
         // Collect the coin!
         gold += nearestCoin.value;
+        totalEarned += nearestCoin.value;
         nearestCoin.collected = true;
         sound.play('coin');
         spawnParticles(nearestCoin.x, nearestCoin.y, 'coin_sparkle', 8);
@@ -4233,8 +5895,8 @@ class Angie {
     this.glowPhase += dt * 2;
     this.wingPhase += dt * 6;
 
-    // Reset revive flag when alien is defeated
-    if (!alien || alien.dead) {
+    // Reset revive flag when all aliens are defeated
+    if (!hasActiveAlien()) {
       this.hasRevivedThisAttack = false;
     }
 
@@ -4291,7 +5953,7 @@ class Angie {
   }
 
   canRevive() {
-    return !this.hasRevivedThisAttack && alien && !alien.dead;
+    return !this.hasRevivedThisAttack && hasActiveAlien();
   }
 
   draw(ctx) {
@@ -4426,7 +6088,7 @@ class Angie {
     ctx.fillText('ANGIE', this.x, this.y + this.size * 0.7 + 15);
 
     // Revive status indicator
-    if (alien && !alien.dead) {
+    if (hasActiveAlien()) {
       if (this.hasRevivedThisAttack) {
         ctx.fillStyle = 'rgba(150, 150, 150, 0.8)';
         ctx.font = 'bold 9px Arial';
@@ -4441,6 +6103,30 @@ class Angie {
 }
 
 // ============================================
+// Alien System Helper Functions
+// ============================================
+function findNearestAlien(x, y) {
+  let nearest = null;
+  let nearestDist = Infinity;
+
+  for (const a of aliens) {
+    if (a.dead || a.entering) continue;
+    const dx = a.x - x;
+    const dy = a.y - y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearest = a;
+    }
+  }
+  return nearest;
+}
+
+function hasActiveAlien() {
+  return aliens.some(a => !a.dead && !a.entering);
+}
+
+// ============================================
 // Pet System Helper Functions
 // ============================================
 function getPetCount() {
@@ -4452,7 +6138,15 @@ function canBuyPet() {
   return getPetCount() < MAX_PETS;
 }
 
+function updatePetCounter() {
+  const counter = document.getElementById('petCounter');
+  if (counter) {
+    counter.textContent = `Pets: ${getPetCount()}/${MAX_PETS}`;
+  }
+}
+
 function updateAllPetButtons() {
+  updatePetCounter();
   updateStinkyButtonState();
   updateNikoButtonState();
   updateZorfButtonState();
@@ -4501,6 +6195,227 @@ function updateAngieButtonState() {
 }
 
 // ============================================
+// Quality of Life Helper Functions
+// ============================================
+
+function getTotalFishCount() {
+  return guppies.length + trouts.length + carnivores.length + skellfins.length +
+         breeders.length + feeders.length + starcatchers.length +
+         guppycrunchers.length + beetlemunchers.length + ultravores.length +
+         mobiuses.length + crabs.length + wardens.length + seekers.length +
+         anemones.length + geotles.length;
+}
+
+function getPrestigeBonus(type) {
+  switch (type) {
+    case 'gold': return 1 + (prestigeLevel * 0.1);      // +10% per level
+    case 'speed': return 1 + (prestigeLevel * 0.05);    // +5% per level
+    case 'coinDrop': return 1 + (prestigeLevel * 0.05); // +5% per level
+    default: return 1;
+  }
+}
+
+function checkAchievements() {
+  // First Fish
+  if (!unlockedAchievements.has('first_fish') && stats.fishBought >= 1) {
+    unlockAchievement('first_fish');
+  }
+
+  // First Carnivore
+  if (!unlockedAchievements.has('first_carnivore') &&
+      (carnivores.length > 0 || skellfins.length > 0)) {
+    unlockAchievement('first_carnivore');
+  }
+
+  // Alien Slayer
+  if (!unlockedAchievements.has('alien_slayer') && stats.aliensDefeated >= 10) {
+    unlockAchievement('alien_slayer');
+  }
+
+  // Millionaire
+  if (!unlockedAchievements.has('millionaire') && stats.totalEarned >= 100000) {
+    unlockAchievement('millionaire');
+  }
+
+  // Full Tank
+  if (!unlockedAchievements.has('full_tank') && getTotalFishCount() >= 20) {
+    unlockAchievement('full_tank');
+  }
+
+  // Pet Lover - all 6 pet types owned
+  const hasPets = stinkies.length > 0 && nikos.length > 0 && zorfs.length > 0 &&
+                  itchys.length > 0 && clydes.length > 0 && angie !== null;
+  if (!unlockedAchievements.has('pet_lover') && hasPets) {
+    unlockAchievement('pet_lover');
+  }
+
+  // Survivor - 30 minutes of play time
+  if (!unlockedAchievements.has('survivor') && stats.timePlayed >= 1800) {
+    unlockAchievement('survivor');
+  }
+}
+
+function unlockAchievement(id) {
+  if (unlockedAchievements.has(id)) return;
+
+  unlockedAchievements.add(id);
+  ACHIEVEMENTS[id].unlocked = true;
+
+  // Show popup notification
+  achievementPopup = {
+    name: ACHIEVEMENTS[id].name,
+    desc: ACHIEVEMENTS[id].desc,
+    timer: 3  // Display for 3 seconds
+  };
+
+  sound.play('victory');
+}
+
+function toggleSpeed() {
+  gameSpeed = gameSpeed === 1 ? 2 : 1;
+  const btn = document.getElementById('speedBtn');
+  if (btn) {
+    btn.textContent = `Speed: ${gameSpeed}x`;
+    btn.classList.toggle('active', gameSpeed === 2);
+  }
+}
+
+function toggleStats() {
+  statsVisible = !statsVisible;
+  const btn = document.getElementById('statsBtn');
+  if (btn) {
+    btn.classList.toggle('active', statsVisible);
+  }
+}
+
+function buyAutoCollect() {
+  if (!autoCollectUpgraded && gold >= AUTO_COLLECT_COST) {
+    gold -= AUTO_COLLECT_COST;
+    autoCollectUpgraded = true;
+    sound.play('buy');
+    updateGoldDisplay();
+    updateAutoCollectButtonState();
+  }
+}
+
+function updateAutoCollectButtonState() {
+  const btn = document.getElementById('buyAutoCollectBtn');
+  if (btn && autoCollectUpgraded) {
+    btn.disabled = true;
+    btn.textContent = 'Auto-Collect!';
+  }
+}
+
+function doPrestige() {
+  if (totalEarned < PRESTIGE_THRESHOLD) return;
+  if (!confirm(`Prestige and reset? You'll gain ${Math.floor(totalEarned / 10000)} prestige points and permanent bonuses!`)) return;
+
+  // Calculate prestige points earned
+  const pointsEarned = Math.floor(totalEarned / 10000);
+  prestigePoints += pointsEarned;
+  prestigeLevel++;
+
+  // Clear all fish arrays
+  guppies.length = 0;
+  trouts.length = 0;
+  carnivores.length = 0;
+  skellfins.length = 0;
+  breeders.length = 0;
+  feeders.length = 0;
+  starcatchers.length = 0;
+  guppycrunchers.length = 0;
+  beetlemunchers.length = 0;
+  ultravores.length = 0;
+  mobiuses.length = 0;
+  crabs.length = 0;
+  wardens.length = 0;
+  seekers.length = 0;
+  anemones.length = 0;
+  geotles.length = 0;
+
+  // Clear pets
+  stinkies.length = 0;
+  nikos.length = 0;
+  zorfs.length = 0;
+  itchys.length = 0;
+  clydes.length = 0;
+  angie = null;
+
+  // Clear items
+  pellets.length = 0;
+  coins.length = 0;
+  beetles.length = 0;
+  particles.length = 0;
+
+  // Clear aliens
+  aliens.length = 0;
+  alien = null;
+  missiles.length = 0;
+
+  // Reset upgrades
+  foodUpgraded = false;
+  laserUpgraded = false;
+  autoCollectUpgraded = false;
+
+  // Reset gold with prestige bonus
+  const baseGold = 100;
+  gold = Math.floor(baseGold * getPrestigeBonus('gold'));
+  totalEarned = 0;
+
+  // Reset alien timer
+  alienSpawnTimer = 60 + Math.random() * 30;
+  alienWarningActive = false;
+
+  // Spawn 2 starter fish
+  for (let i = 0; i < 2; i++) {
+    const pos = tankManager.getRandomPosition();
+    trouts.push(new Trout(pos.x, pos.y));
+  }
+
+  // Update UI
+  updateGoldDisplay();
+  updateFoodButtonState();
+  updateLaserButtonState();
+  updateAutoCollectButtonState();
+  updateAllPetButtons();
+  updatePrestigeButtonState();
+
+  // Reset button states
+  const foodBtn = document.getElementById('upgradeFoodBtn');
+  if (foodBtn) {
+    foodBtn.disabled = false;
+    foodBtn.textContent = 'Food+ ($200)';
+  }
+  const laserBtn = document.getElementById('buyLaserBtn');
+  if (laserBtn) {
+    laserBtn.disabled = false;
+    laserBtn.textContent = 'Laser ($300)';
+  }
+  const autoBtn = document.getElementById('buyAutoCollectBtn');
+  if (autoBtn) {
+    autoBtn.disabled = false;
+    autoBtn.textContent = 'Auto-Collect ($1000)';
+  }
+
+  sound.play('evolve');
+  saveGame();
+}
+
+function updatePrestigeButtonState() {
+  const btn = document.getElementById('prestigeBtn');
+  if (btn) {
+    btn.style.display = totalEarned >= PRESTIGE_THRESHOLD ? 'inline-block' : 'none';
+    btn.textContent = `Prestige (${Math.floor(totalEarned / 10000)} pts)`;
+  }
+}
+
+// Expose new functions globally
+window.toggleSpeed = toggleSpeed;
+window.toggleStats = toggleStats;
+window.buyAutoCollect = buyAutoCollect;
+window.doPrestige = doPrestige;
+
+// ============================================
 // Input Handling
 // ============================================
 canvas.addEventListener('click', (e) => {
@@ -4511,53 +6426,112 @@ canvas.addEventListener('click', (e) => {
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
 
-  // COMBAT MODE: If alien present, clicks damage alien instead of feeding
-  if (alien && !alien.dead) {
-    if (alien.isClicked(x, y)) {
-      // Laser upgrade deals 3 damage instead of 1
-      const damage = laserUpgraded ? 3 : 1;
-      for (let d = 0; d < damage; d++) {
-        alien.takeDamage();
+  // COMBAT MODE: If any alien present, clicks damage aliens/missiles instead of feeding
+  const inCombat = aliens.length > 0 || (alien && !alien.dead);
+  if (inCombat) {
+    let hitSomething = false;
+
+    // Check missiles first (can shoot them down)
+    for (let i = missiles.length - 1; i >= 0; i--) {
+      if (missiles[i].isClicked(x, y)) {
+        const damage = laserUpgraded ? 3 : 1;
+        for (let d = 0; d < damage; d++) {
+          missiles[i].takeDamage();
+        }
+        sound.play('hit');
+        spawnParticles(x, y, 'sparkle', 5);
+        hitSomething = true;
+        break;
       }
-      sound.play('hit');
-      spawnParticles(x, y, 'blood', laserUpgraded ? 15 : 8);
     }
-    // Still allow coin collection during combat
-    for (let i = coins.length - 1; i >= 0; i--) {
-      if (coins[i].isClicked(x, y)) {
-        gold += coins[i].value;
-        coins[i].collected = true;
-        sound.play('coin');
-        spawnParticles(coins[i].x, coins[i].y, 'coin_sparkle', 8);
-        updateGoldDisplay();
-        return;
+
+    // Check all aliens
+    if (!hitSomething) {
+      for (const a of aliens) {
+        if (a.dead) continue;
+        if (a.isClicked(x, y)) {
+          const damage = laserUpgraded ? 3 : 1;
+          for (let d = 0; d < damage; d++) {
+            a.takeDamage();
+          }
+          sound.play('hit');
+          spawnParticles(x, y, 'blood', laserUpgraded ? 15 : 8);
+          hitSomething = true;
+          break;
+        }
       }
+    }
+
+    // Still allow coin collection during combat (with auto-collect if upgraded)
+    let collectedCombat = false;
+    for (let i = coins.length - 1; i >= 0; i--) {
+      const coin = coins[i];
+      const dx = coin.x - x;
+      const dy = coin.y - y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const inRange = autoCollectUpgraded ? dist < AUTO_COLLECT_RADIUS : coin.isClicked(x, y);
+      if (inRange) {
+        gold += coin.value;
+        totalEarned += coin.value;
+        stats.totalEarned += coin.value;
+        stats.coinsCollected++;
+        coin.collected = true;
+        sound.play('coin');
+        spawnParticles(coin.x, coin.y, 'coin_sparkle', 8);
+        collectedCombat = true;
+      }
+    }
+    if (collectedCombat) {
+      updateGoldDisplay();
     }
     return; // No food dropping during combat!
   }
 
-  // Check for coin collection first
+  // Check for coin collection (with auto-collect radius if upgraded)
+  let collectedAnything = false;
   for (let i = coins.length - 1; i >= 0; i--) {
-    if (coins[i].isClicked(x, y)) {
-      gold += coins[i].value;
-      coins[i].collected = true;
+    const coin = coins[i];
+    const dx = coin.x - x;
+    const dy = coin.y - y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Collect if clicked directly OR within auto-collect radius
+    const inRange = autoCollectUpgraded ? dist < AUTO_COLLECT_RADIUS : coin.isClicked(x, y);
+    if (inRange) {
+      gold += coin.value;
+      totalEarned += coin.value;
+      stats.totalEarned += coin.value;
+      stats.coinsCollected++;
+      coin.collected = true;
       sound.play('coin');
-      spawnParticles(coins[i].x, coins[i].y, 'coin_sparkle', 8);
-      updateGoldDisplay();
-      return; // Don't spawn pellet when collecting coin
+      spawnParticles(coin.x, coin.y, 'coin_sparkle', 8);
+      collectedAnything = true;
     }
   }
 
-  // Check for beetle collection
+  // Check for beetle collection (with auto-collect radius if upgraded)
   for (let i = beetles.length - 1; i >= 0; i--) {
-    if (beetles[i].isClicked(x, y)) {
+    const beetle = beetles[i];
+    const dx = beetle.x - x;
+    const dy = beetle.y - y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    const inRange = autoCollectUpgraded ? dist < AUTO_COLLECT_RADIUS : beetle.isClicked(x, y);
+    if (inRange) {
       gold += BEETLE_VALUE;
-      beetles[i].collected = true;
+      totalEarned += BEETLE_VALUE;
+      stats.totalEarned += BEETLE_VALUE;
+      stats.coinsCollected++;
+      beetle.collected = true;
       sound.play('coin');
-      spawnParticles(beetles[i].x, beetles[i].y, 'coin_sparkle', 6);
-      updateGoldDisplay();
-      return;
+      spawnParticles(beetle.x, beetle.y, 'coin_sparkle', 6);
+      collectedAnything = true;
     }
+  }
+
+  if (collectedAnything) {
+    updateGoldDisplay();
+    return; // Don't spawn pellet when collecting
   }
 
   // Spawn pellet if enough gold
@@ -4582,6 +6556,7 @@ function buyGuppy() {
     gold -= GUPPY_COST;
     const pos = tankManager.getRandomPosition();
     guppies.push(new Guppy(pos.x, pos.y));
+    stats.fishBought++;
     sound.play('buy');
     updateGoldDisplay();
   }
@@ -4610,6 +6585,7 @@ function buyCarnivore() {
     gold -= CARNIVORE_COST;
     const pos = tankManager.getRandomPosition();
     carnivores.push(new Carnivore(pos.x, pos.y));
+    stats.fishBought++;
     sound.play('buy');
     updateGoldDisplay();
   }
@@ -4648,6 +6624,7 @@ function buyBreeder() {
     gold -= BREEDER_COST;
     const pos = tankManager.getRandomPosition();
     breeders.push(new Breeder(pos.x, pos.y));
+    stats.fishBought++;
     sound.play('buy');
     updateGoldDisplay();
   }
@@ -4668,6 +6645,7 @@ function buyFeeder() {
     gold -= FEEDER_COST;
     const pos = tankManager.getRandomPosition();
     feeders.push(new Feeder(pos.x, pos.y));
+    stats.fishBought++;
     sound.play('buy');
     updateGoldDisplay();
   }
@@ -4678,6 +6656,7 @@ function buyStarcatcher() {
     gold -= STARCATCHER_COST;
     const pos = tankManager.getRandomPosition();
     starcatchers.push(new Starcatcher(pos.x, pos.y));
+    stats.fishBought++;
     sound.play('buy');
     updateGoldDisplay();
   }
@@ -4687,6 +6666,7 @@ function buyGuppycruncher() {
   if (gold >= GUPPYCRUNCHER_COST) {
     gold -= GUPPYCRUNCHER_COST;
     guppycrunchers.push(new Guppycruncher());
+    stats.fishBought++;
     sound.play('buy');
     updateGoldDisplay();
   }
@@ -4697,6 +6677,7 @@ function buyBeetlemuncher() {
     gold -= BEETLEMUNCHER_COST;
     const pos = tankManager.getRandomPosition();
     beetlemunchers.push(new Beetlemuncher(pos.x, pos.y));
+    stats.fishBought++;
     sound.play('buy');
     updateGoldDisplay();
   }
@@ -4707,6 +6688,51 @@ function buyUltravore() {
     gold -= ULTRAVORE_COST;
     const pos = tankManager.getRandomPosition();
     ultravores.push(new Ultravore(pos.x, pos.y));
+    stats.fishBought++;
+    sound.play('buy');
+    updateGoldDisplay();
+  }
+}
+
+function buyWarden() {
+  if (gold >= WARDEN_COST) {
+    gold -= WARDEN_COST;
+    const pos = tankManager.getRandomPosition();
+    wardens.push(new WardenLamprey(pos.x, pos.y));
+    stats.fishBought++;
+    sound.play('buy');
+    updateGoldDisplay();
+  }
+}
+
+function buySeeker() {
+  if (gold >= SEEKER_COST) {
+    gold -= SEEKER_COST;
+    const pos = tankManager.getRandomPosition();
+    seekers.push(new Seeker(pos.x, pos.y));
+    stats.fishBought++;
+    sound.play('buy');
+    updateGoldDisplay();
+  }
+}
+
+function buyAnemone() {
+  if (gold >= ANEMONE_COST) {
+    gold -= ANEMONE_COST;
+    const pos = tankManager.getRandomPosition();
+    anemones.push(new Anemone(pos.x, pos.y));
+    stats.fishBought++;
+    sound.play('buy');
+    updateGoldDisplay();
+  }
+}
+
+function buyGeotle() {
+  if (gold >= GEOTLE_COST) {
+    gold -= GEOTLE_COST;
+    const pos = tankManager.getRandomPosition();
+    geotles.push(new Geotle(pos.x, pos.y));
+    stats.fishBought++;
     sound.play('buy');
     updateGoldDisplay();
   }
@@ -4803,6 +6829,10 @@ window.buyStarcatcher = buyStarcatcher;
 window.buyGuppycruncher = buyGuppycruncher;
 window.buyBeetlemuncher = buyBeetlemuncher;
 window.buyUltravore = buyUltravore;
+window.buyWarden = buyWarden;
+window.buySeeker = buySeeker;
+window.buyAnemone = buyAnemone;
+window.buyGeotle = buyGeotle;
 window.buyNiko = buyNiko;
 window.buyZorf = buyZorf;
 window.buyItchy = buyItchy;
@@ -4815,16 +6845,22 @@ window.newGame = newGame;
 // ============================================
 // Game Initialization
 // ============================================
-function init() {
+async function init() {
+  // Preload fish sprites
+  console.log('Loading fish sprites...');
+  await preloadFishImages();
+  console.log('Fish sprites loaded!');
+
   // Try to load saved game
   const loaded = loadGame();
 
-  // If no save, spawn 2 free guppies
+  // If no save, spawn 2 free fish (use Trout for new games)
   if (!loaded) {
     for (let i = 0; i < 2; i++) {
       const pos = tankManager.getRandomPosition();
-      guppies.push(new Guppy(pos.x, pos.y));
+      trouts.push(new Trout(pos.x, pos.y));
     }
+    updateAllPetButtons();
   }
 }
 
@@ -4834,19 +6870,63 @@ function init() {
 let lastTime = 0;
 
 function gameLoop(timestamp) {
-  const dt = (timestamp - lastTime) / 1000;
+  const rawDt = (timestamp - lastTime) / 1000;
   lastTime = timestamp;
+
+  // Apply game speed (but NOT to alien spawn timer for balance)
+  const dt = rawDt * gameSpeed;
+
+  // Track time played (use raw time, not sped up)
+  stats.timePlayed += rawDt;
+
+  // Check achievements periodically (every 1 second of real time)
+  achievementCheckTimer += rawDt;
+  if (achievementCheckTimer >= 1) {
+    achievementCheckTimer = 0;
+    checkAchievements();
+  }
+
+  // Update achievement popup timer
+  if (achievementPopup) {
+    achievementPopup.timer -= rawDt;
+    if (achievementPopup.timer <= 0) {
+      achievementPopup = null;
+    }
+  }
+
+  // Update prestige button visibility
+  updatePrestigeButtonState();
 
   // Clear canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Alien spawn timer
-  if (!alien && guppies.length > 0) {
-    alienSpawnTimer -= dt;
-    if (alienSpawnTimer <= 0) {
-      alien = new Sylvester();
-      sound.play('alien');
-      showAlienWarning();
+  // Alien spawn timer with warning system (uses rawDt to keep balanced)
+  const hasFish = guppies.length > 0 || trouts.length > 0 || carnivores.length > 0 ||
+                  skellfins.length > 0 || breeders.length > 0 || geotles.length > 0 ||
+                  starcatchers.length > 0 || ultravores.length > 0 || mobiuses.length > 0;
+
+  const noActiveAliens = !alien && aliens.length === 0;
+
+  if (noActiveAliens && hasFish) {
+    if (alienWarningActive) {
+      // Warning countdown active (use rawDt for balance)
+      alienWarningTimer -= rawDt;
+      if (alienWarningTimer <= 0) {
+        // Spawn alien(s)!
+        spawnAlien();
+        alienWarningActive = false;
+        showAlienWarning();
+      }
+    } else {
+      // Main spawn timer (use rawDt for balance)
+      alienSpawnTimer -= rawDt;
+      if (alienSpawnTimer <= 0) {
+        // Start warning phase
+        alienWarningActive = true;
+        alienWarningTimer = ALIEN_WARNING_DURATION;
+        sound.play('alien');  // Warning sound
+        showBossWarning();
+      }
     }
   }
 
@@ -4957,6 +7037,74 @@ function gameLoop(timestamp) {
     }
   }
 
+  // Update and draw trouts (sprite-based)
+  for (let i = trouts.length - 1; i >= 0; i--) {
+    trouts[i].update(dt);
+    if (trouts[i].state === 'dead') {
+      trouts.splice(i, 1);
+    } else {
+      trouts[i].draw(ctx);
+    }
+  }
+
+  // Update and draw skellfins (sprite-based)
+  for (let i = skellfins.length - 1; i >= 0; i--) {
+    skellfins[i].update(dt);
+    if (skellfins[i].state === 'dead') {
+      skellfins.splice(i, 1);
+    } else {
+      skellfins[i].draw(ctx);
+    }
+  }
+
+  // Update and draw mobiuses (sprite-based)
+  for (let i = mobiuses.length - 1; i >= 0; i--) {
+    mobiuses[i].update(dt);
+    if (mobiuses[i].state === 'dead') {
+      mobiuses.splice(i, 1);
+    } else {
+      mobiuses[i].draw(ctx);
+    }
+  }
+
+  // Update and draw crabs (sprite-based)
+  for (let i = crabs.length - 1; i >= 0; i--) {
+    crabs[i].update(dt);
+    if (crabs[i].state === 'dead') {
+      crabs.splice(i, 1);
+    } else {
+      crabs[i].draw(ctx);
+    }
+  }
+
+  // Update and draw wardens (Phase 18 - alien attackers)
+  for (const warden of wardens) {
+    warden.update(dt);
+    warden.draw(ctx);
+  }
+
+  // Update and draw seekers (Phase 18 - coin collectors)
+  for (const seeker of seekers) {
+    seeker.update(dt);
+    seeker.draw(ctx);
+  }
+
+  // Update and draw anemones (Phase 18 - healers)
+  for (const anemone of anemones) {
+    anemone.update(dt);
+    anemone.draw(ctx);
+  }
+
+  // Update and draw geotles (Phase 18 - breeders)
+  for (let i = geotles.length - 1; i >= 0; i--) {
+    geotles[i].update(dt);
+    if (geotles[i].state === 'dead') {
+      geotles.splice(i, 1);
+    } else {
+      geotles[i].draw(ctx);
+    }
+  }
+
   // Update and draw Stinkies (pets)
   for (const stinky of stinkies) {
     stinky.update(dt);
@@ -4993,15 +7141,38 @@ function gameLoop(timestamp) {
     angie.draw(ctx);
   }
 
-  // Update and draw alien
-  if (alien) {
-    if (alien.dead) {
-      alien = null;
-      alienSpawnTimer = ALIEN_SPAWN_MIN + Math.random() * (ALIEN_SPAWN_MAX - ALIEN_SPAWN_MIN);
-      hideAlienWarning();
+  // Update and draw aliens (supports multiple)
+  for (let i = aliens.length - 1; i >= 0; i--) {
+    const a = aliens[i];
+    if (a.dead) {
+      aliens.splice(i, 1);
     } else {
-      alien.update(dt);
-      alien.draw(ctx);
+      // Destructor needs missiles array passed to update
+      if (a.type === 'destructor') {
+        a.update(dt, missiles);
+      } else {
+        a.update(dt);
+      }
+      a.draw(ctx);
+    }
+  }
+
+  // Legacy single alien compatibility
+  if (alien && alien.dead) {
+    alien = null;
+  }
+  if (aliens.length === 0 && alien === null) {
+    hideAlienWarning();
+  }
+
+  // Update and draw missiles
+  for (let i = missiles.length - 1; i >= 0; i--) {
+    const m = missiles[i];
+    m.update(dt);
+    if (m.dead) {
+      missiles.splice(i, 1);
+    } else {
+      m.draw(ctx);
     }
   }
 
@@ -5023,12 +7194,49 @@ function gameLoop(timestamp) {
     spawnParticles(x, y, 'bubble', 1);
   }
 
-  // Draw combat mode overlay if alien present
-  if (alien && !alien.dead && !alien.entering) {
+  // Draw warning countdown if active
+  if (alienWarningActive) {
+    drawWarningCountdown();
+  }
+
+  // Draw combat mode overlay if aliens present
+  const activeAliens = aliens.filter(a => !a.dead && !a.entering);
+  if (activeAliens.length > 0) {
     drawCombatOverlay();
   }
 
+  // Draw fish counter UI
+  drawFishCounterUI();
+
+  // Draw statistics panel if visible
+  if (statsVisible) {
+    drawStatsPanel();
+  }
+
+  // Draw achievement popup if active
+  if (achievementPopup) {
+    drawAchievementPopup();
+  }
+
+  // Draw prestige level indicator
+  if (prestigeLevel > 0) {
+    drawPrestigeIndicator();
+  }
+
   requestAnimationFrame(gameLoop);
+}
+
+function drawWarningCountdown() {
+  // Orange pulsing border
+  ctx.strokeStyle = `rgba(255, 140, 0, ${0.5 + Math.sin(Date.now() / 150) * 0.3})`;
+  ctx.lineWidth = 6;
+  ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+
+  // Countdown text
+  ctx.fillStyle = '#ff8800';
+  ctx.font = 'bold 24px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(`ALIEN INCOMING IN ${Math.ceil(alienWarningTimer)}...`, canvas.width / 2, 50);
 }
 
 function drawCombatOverlay() {
@@ -5037,16 +7245,289 @@ function drawCombatOverlay() {
   ctx.lineWidth = 8;
   ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
 
-  // Combat text
+  // Combat text based on alien type
   ctx.fillStyle = '#ff0000';
   ctx.font = 'bold 16px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText('CLICK THE ALIEN TO ATTACK!', canvas.width / 2, 30);
+
+  // Find the first active alien to display info
+  const firstAlien = aliens.find(a => !a.dead);
+  let combatText = 'CLICK THE ALIEN TO ATTACK!';
+
+  if (firstAlien) {
+    if (firstAlien.type === 'gus') {
+      combatText = 'FEED GUS PELLETS TO DEFEAT!';
+    } else if (firstAlien.type === 'destructor') {
+      combatText = 'SHOOT DOWN MISSILES! ATTACK THE DESTRUCTOR!';
+    } else if (firstAlien.type === 'balrog') {
+      combatText = 'BALROG ATTACK! NEVER GETS FULL!';
+    }
+  }
+
+  ctx.fillText(combatText, canvas.width / 2, 30);
+
+  // Show missile count if any
+  if (missiles.length > 0) {
+    ctx.fillStyle = '#ffff00';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText(`Missiles: ${missiles.length}`, canvas.width / 2, 50);
+  }
+}
+
+// ============================================
+// Quality of Life UI Drawing
+// ============================================
+
+function drawFishCounterUI() {
+  const fishCounts = [
+    { name: 'Guppy/Trout', count: guppies.length + trouts.length, color: '#ffa500' },
+    { name: 'Carnivore', count: carnivores.length + skellfins.length, color: '#8b0000' },
+    { name: 'Breeder', count: breeders.length, color: '#ff69b4' },
+    { name: 'Feeder', count: feeders.length, color: '#ff8c00' },
+    { name: 'Starcatcher', count: starcatchers.length, color: '#9370db' },
+    { name: 'Cruncher', count: guppycrunchers.length + crabs.length, color: '#ff6347' },
+    { name: 'Muncher', count: beetlemunchers.length, color: '#32cd32' },
+    { name: 'Ultravore', count: ultravores.length + mobiuses.length, color: '#708090' },
+    { name: 'Warden', count: wardens.length, color: '#4a0080' },
+    { name: 'Seeker', count: seekers.length, color: '#ff9800' },
+    { name: 'Anemone', count: anemones.length, color: '#ff1493' },
+    { name: 'Geotle', count: geotles.length, color: '#228b22' }
+  ];
+
+  // Filter to only show fish types that have been purchased
+  const activeFish = fishCounts.filter(f => f.count > 0);
+  if (activeFish.length === 0) return;
+
+  // Panel dimensions
+  const padding = 8;
+  const lineHeight = 14;
+  const panelWidth = 100;
+  const panelHeight = padding * 2 + activeFish.length * lineHeight;
+
+  // Draw semi-transparent background
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+  ctx.fillRect(10, 70, panelWidth, panelHeight);
+
+  // Draw border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(10, 70, panelWidth, panelHeight);
+
+  // Draw fish counts
+  ctx.font = 'bold 10px Arial';
+  ctx.textAlign = 'left';
+
+  activeFish.forEach((fish, i) => {
+    const y = 70 + padding + (i + 1) * lineHeight - 3;
+    ctx.fillStyle = fish.color;
+    ctx.fillText(`${fish.name}: ${fish.count}`, 10 + padding, y);
+  });
+}
+
+function drawStatsPanel() {
+  const panelWidth = 300;
+  const panelHeight = 280;
+  const x = (canvas.width - panelWidth) / 2;
+  const y = (canvas.height - panelHeight) / 2;
+
+  // Semi-transparent background
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+  ctx.fillRect(x, y, panelWidth, panelHeight);
+
+  // Border
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x, y, panelWidth, panelHeight);
+
+  // Title
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 20px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('STATISTICS', x + panelWidth / 2, y + 30);
+
+  // Stats list
+  ctx.font = '14px Arial';
+  ctx.textAlign = 'left';
+  const statsList = [
+    { label: 'Total Earned', value: `$${stats.totalEarned.toLocaleString()}` },
+    { label: 'Coins Collected', value: stats.coinsCollected.toLocaleString() },
+    { label: 'Fish Bought', value: stats.fishBought.toLocaleString() },
+    { label: 'Fish Lost', value: stats.totalFishLost.toLocaleString() },
+    { label: 'Aliens Defeated', value: stats.aliensDefeated.toLocaleString() },
+    { label: 'Time Played', value: formatTime(stats.timePlayed) },
+    { label: 'Current Fish', value: getTotalFishCount().toLocaleString() },
+    { label: 'Current Pets', value: getPetCount().toLocaleString() }
+  ];
+
+  ctx.fillStyle = '#ffffff';
+  statsList.forEach((stat, i) => {
+    const lineY = y + 60 + i * 22;
+    ctx.textAlign = 'left';
+    ctx.fillText(stat.label + ':', x + 20, lineY);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText(stat.value, x + panelWidth - 20, lineY);
+    ctx.fillStyle = '#ffffff';
+  });
+
+  // Achievements section
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('ACHIEVEMENTS', x + panelWidth / 2, y + panelHeight - 60);
+
+  // Achievement count
+  ctx.font = '12px Arial';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(`${unlockedAchievements.size} / ${Object.keys(ACHIEVEMENTS).length} unlocked`, x + panelWidth / 2, y + panelHeight - 40);
+
+  // List unlocked achievements
+  ctx.textAlign = 'left';
+  ctx.font = '10px Arial';
+  let achY = y + panelHeight - 25;
+  const unlockedList = Array.from(unlockedAchievements);
+  const displayAch = unlockedList.slice(0, 3);  // Show up to 3
+  displayAch.forEach((id, i) => {
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText(`★ ${ACHIEVEMENTS[id].name}`, x + 20 + (i * 95), achY);
+  });
+
+  // Click to close hint
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.font = '10px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Click Stats button to close', x + panelWidth / 2, y + panelHeight - 8);
+}
+
+function formatTime(seconds) {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  if (hrs > 0) {
+    return `${hrs}h ${mins}m ${secs}s`;
+  } else if (mins > 0) {
+    return `${mins}m ${secs}s`;
+  } else {
+    return `${secs}s`;
+  }
+}
+
+function drawAchievementPopup() {
+  const popupWidth = 250;
+  const popupHeight = 60;
+  const x = (canvas.width - popupWidth) / 2;
+  const y = 80;
+
+  // Animated entrance
+  const progress = Math.min(1, (3 - achievementPopup.timer) / 0.3);
+  const slideY = y - 30 + progress * 30;
+
+  // Gold background with glow
+  ctx.shadowColor = '#ffd700';
+  ctx.shadowBlur = 20;
+  ctx.fillStyle = 'linear-gradient(180deg, #ffd700 0%, #ff8c00 100%)';
+  ctx.fillStyle = '#ffd700';
+  ctx.fillRect(x, slideY, popupWidth, popupHeight);
+  ctx.shadowBlur = 0;
+
+  // Dark border
+  ctx.strokeStyle = '#8b6914';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x, slideY, popupWidth, popupHeight);
+
+  // Star icon
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 24px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('★', x + 15, slideY + 38);
+
+  // Achievement text
+  ctx.fillStyle = '#000000';
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('ACHIEVEMENT UNLOCKED!', x + 50, slideY + 22);
+
+  ctx.font = '12px Arial';
+  ctx.fillText(achievementPopup.name, x + 50, slideY + 42);
+}
+
+function drawPrestigeIndicator() {
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 12px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText(`★ Prestige ${prestigeLevel}`, canvas.width - 15, 85);
+
+  if (prestigeLevel > 0) {
+    ctx.font = '9px Arial';
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.7)';
+    ctx.fillText(`+${prestigeLevel * 10}% gold, +${prestigeLevel * 5}% speed`, canvas.width - 15, 98);
+  }
+}
+
+function spawnAlien() {
+  // Pick random alien type
+  const alienTypes = ['sylvester', 'balrog', 'gus', 'destructor'];
+  const type = alienTypes[Math.floor(Math.random() * alienTypes.length)];
+
+  let newAlien;
+  switch (type) {
+    case 'balrog':
+      newAlien = new Balrog();
+      break;
+    case 'gus':
+      newAlien = new Gus();
+      break;
+    case 'destructor':
+      newAlien = new Destructor();
+      break;
+    default:
+      newAlien = new Sylvester();
+  }
+
+  // Use the legacy single alien variable for backward compatibility
+  alien = newAlien;
+  aliens.push(newAlien);
+
+  // Spawn second alien if wave mode (total earned > $10,000)
+  if (totalEarned >= WAVE_THRESHOLD) {
+    const type2 = alienTypes[Math.floor(Math.random() * alienTypes.length)];
+    let secondAlien;
+    switch (type2) {
+      case 'balrog':
+        secondAlien = new Balrog();
+        break;
+      case 'gus':
+        secondAlien = new Gus();
+        break;
+      case 'destructor':
+        secondAlien = new Destructor();
+        break;
+      default:
+        secondAlien = new Sylvester();
+    }
+    aliens.push(secondAlien);
+  }
+
+  // Reset spawn timer for next wave
+  alienSpawnTimer = ALIEN_SPAWN_MIN + Math.random() * (ALIEN_SPAWN_MAX - ALIEN_SPAWN_MIN);
+}
+
+function showBossWarning() {
+  const warning = document.getElementById('alienWarning');
+  if (warning) {
+    warning.textContent = 'ALIEN INCOMING!';
+    warning.style.display = 'block';
+    warning.style.background = 'linear-gradient(180deg, #ff8800 0%, #ff4400 100%)';
+  }
 }
 
 function showAlienWarning() {
   const warning = document.getElementById('alienWarning');
-  if (warning) warning.style.display = 'block';
+  if (warning) {
+    warning.textContent = 'ALIEN ATTACK! Click to fight!';
+    warning.style.display = 'block';
+    warning.style.background = 'linear-gradient(180deg, #8b0000 0%, #4a0000 100%)';
+  }
 }
 
 function hideAlienWarning() {
@@ -5054,6 +7535,104 @@ function hideAlienWarning() {
   if (warning) warning.style.display = 'none';
 }
 
+// ============================================
+// Debug Commands (for development/testing)
+// Access via browser console: game.debug.*
+// ============================================
+window.game = {
+  debug: {
+    // Economy
+    setGold: (amount) => { gold = amount; updateGoldDisplay(); console.log(`Gold set to $${amount}`); },
+    addGold: (amount) => { gold += amount; updateGoldDisplay(); console.log(`Added $${amount}, now $${gold}`); },
+
+    // Spawning
+    spawnAlien: (type = 'random') => {
+      const types = ['sylvester', 'balrog', 'gus', 'destructor'];
+      const chosen = type === 'random' ? types[Math.floor(Math.random() * types.length)] : type;
+      let newAlien;
+      switch(chosen) {
+        case 'balrog': newAlien = new Balrog(); break;
+        case 'gus': newAlien = new Gus(); break;
+        case 'destructor': newAlien = new Destructor(); break;
+        default: newAlien = new Sylvester();
+      }
+      aliens.push(newAlien);
+      showAlienWarning();
+      console.log(`Spawned ${chosen}`);
+    },
+    spawnTrout: (count = 1) => {
+      for (let i = 0; i < count; i++) trouts.push(new Trout());
+      console.log(`Spawned ${count} trout(s)`);
+    },
+    spawnSkellfin: (count = 1) => {
+      for (let i = 0; i < count; i++) skellfins.push(new Skellfin());
+      console.log(`Spawned ${count} skellfin(s)`);
+    },
+    spawnMobius: (count = 1) => {
+      for (let i = 0; i < count; i++) mobiuses.push(new MobiusDickens());
+      console.log(`Spawned ${count} mobius(es)`);
+    },
+
+    // Killing
+    killAllAliens: () => {
+      const count = aliens.length;
+      aliens.forEach(a => a.health = 0);
+      console.log(`Killed ${count} alien(s)`);
+    },
+    killAllFish: () => {
+      const count = trouts.length + skellfins.length + mobiuses.length + crabs.length;
+      trouts.length = 0;
+      skellfins.length = 0;
+      mobiuses.length = 0;
+      crabs.length = 0;
+      console.log(`Killed ${count} fish`);
+    },
+
+    // Game state
+    setSpeed: (speed) => { gameSpeed = speed; console.log(`Game speed set to ${speed}x`); },
+    resetAlienTimer: () => { alienSpawnTimer = 5; console.log('Alien spawning in 5 seconds'); },
+    skipToWave: () => { totalEarned = 10000; console.log('Total earned set to $10,000 (wave mode)'); },
+
+    // Info
+    status: () => {
+      console.log('=== Game Status ===');
+      console.log(`Gold: $${gold}`);
+      console.log(`Trouts: ${trouts.length}, Skellfins: ${skellfins.length}, Mobiuses: ${mobiuses.length}`);
+      console.log(`Crabs: ${crabs.length}, Wardens: ${wardens.length}, Seekers: ${seekers.length}`);
+      console.log(`Aliens: ${aliens.length}, Missiles: ${missiles.length}`);
+      console.log(`Total Earned: $${totalEarned}`);
+      console.log(`Game Speed: ${gameSpeed}x`);
+      console.log(`Prestige Level: ${prestigeLevel}`);
+    },
+
+    // Unlocks
+    unlockAll: () => {
+      gold = 100000;
+      foodUpgraded = true;
+      laserUpgraded = true;
+      autoCollectUpgraded = true;
+      updateGoldDisplay();
+      console.log('Unlocked all upgrades, set gold to $100,000');
+    },
+
+    // Save management
+    clearSave: () => { deleteSave(); console.log('Save deleted. Refresh to start fresh.'); }
+  },
+
+  // Direct access to game state (read-only intended)
+  state: {
+    get gold() { return gold; },
+    get trouts() { return trouts; },
+    get skellfins() { return skellfins; },
+    get aliens() { return aliens; },
+    get totalEarned() { return totalEarned; },
+    get stats() { return stats; }
+  }
+};
+
+console.log('Gigaquarium Debug: Access via game.debug.* (try game.debug.status())');
+
 // Start the game
-init();
-requestAnimationFrame(gameLoop);
+init().then(() => {
+  requestAnimationFrame(gameLoop);
+});
