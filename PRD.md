@@ -148,19 +148,19 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 - [x] Risk/Reward: Highest income but expensive to replace and needs carnivore supply
 
 ### Phase 13: Expanded Pet System
-- [ ] Niko ($600): Seahorse that produces pearls ($250) every 40 seconds passively
-- [ ] Zorf ($400): Alien pet that drops food pellets every 8 seconds (better than Feeder fish)
-- [ ] Itchy ($700): Swordfish that attacks aliens, dealing 2 damage per second when alien present
-- [ ] Clyde ($550): Jellyfish that floats around collecting coins anywhere (not just floor)
-- [ ] Angie ($2000): Angelic fish that can revive ONE dead fish per alien attack
-- [ ] Pet Limit: Maximum 3 pets active at once
+- [x] Niko ($600): Seahorse that produces pearls ($250) every 40 seconds passively
+- [x] Zorf ($400): Alien pet that drops food pellets every 8 seconds (better than Feeder fish)
+- [x] Itchy ($700): Swordfish that attacks aliens, dealing 2 damage per second when alien present
+- [x] Clyde ($550): Jellyfish that floats around collecting coins anywhere (not just floor)
+- [x] Angie ($2000): Angelic fish that can revive ONE dead fish per alien attack
+- [x] Pet Limit: Maximum 3 pets active at once
 
 ### Phase 14: New Aliens
-- [ ] Balrog: Tougher alien (100 HP), doesn't get full - keeps eating until killed
-- [ ] Gus: Cannot be shot - must be fed 20 pellets until he explodes (drops 10 gold coins)
-- [ ] Destructor: Sits at bottom, fires homing missiles at fish (missiles can be shot down, 3 HP each)
-- [ ] Alien Waves: After reaching $10,000 total earned, aliens spawn in pairs
-- [ ] Boss Warning: 5-second warning before alien spawns with audio cue
+- [x] Balrog: Tougher alien (100 HP), doesn't get full - keeps eating until killed
+- [x] Gus: Cannot be shot - must be fed 20 pellets until he explodes (drops 10 gold coins)
+- [x] Destructor: Sits at bottom, fires homing missiles at fish (missiles can be shot down, 3 HP each)
+- [x] Alien Waves: After reaching $10,000 total earned, aliens spawn in pairs
+- [x] Boss Warning: 5-second warning before alien spawns with audio cue
 
 ### Phase 15: Quality of Life & Progression
 - [ ] Fish Counter UI: Show count of each fish type in corner
@@ -177,22 +177,109 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 - [ ] Screenshot Mode: Hide UI and capture tank image
 - [ ] Ambient Mode: Fish swim slower, relaxing background music option
 
-### Phase 17: Sprite Migration & New Fish
+### Phase 17: Sprite Migration
 - [x] Create fishData.js with FISH_SPECIES configuration (name, rarity, size, behavior, imageUrl, iconUrl, cost, coinType, coinValue, coinDropInterval)
 - [x] Add SIZE_CONFIG with pixel sizes and speeds for sm/med/lg/xxl
 - [x] Add image preloading system with imageCache and preloadFishImages()
 - [x] Replace Guppy class with Trout (sprite-based, no evolution)
 - [x] Replace Carnivore class with Skellfin (sprite-based)
 - [x] Replace Ultravore class with MobiusDickens (sprite-based, $1500 chests)
-- [ ] Replace Guppycruncher class with Crab (sprite-based)
-- [ ] Add WardenLamprey class: Attacks aliens, deals 2 damage/sec
-- [ ] Add Seeker class: Auto-collects coins within detection range
-- [ ] Add Anemone class: Heals nearby fish (-5 hunger/sec)
-- [ ] Add Geotle class: Spawns baby Trout every 25 seconds
-- [ ] Update shop UI with new fish names and costs
-- [ ] Update save/load system for new fish types (remove evolution data)
-- [ ] Update game loop to render new fish arrays
-- [ ] Call preloadFishImages() in init() with loading state
+- [x] Replace Guppycruncher class with Crab (sprite-based)
+
+### Phase 18: New Fish
+- [x] Add WardenLamprey class: Attacks aliens, deals 2 damage/sec
+- [x] Add Seeker class: Auto-collects coins within detection range
+- [x] Add Anemone class: Heals nearby fish (-5 hunger/sec)
+- [x] Add Geotle class: Spawns baby Trout every 25 seconds
+- [x] Update shop UI with new fish names and costs
+- [x] Update save/load system for new fish types (remove evolution data)
+- [x] Update game loop to render new fish arrays
+- [x] Call preloadFishImages() in init() with loading state
+
+---
+
+## Refactoring Phases (Developer Efficiency)
+
+### Phase R1: Module Split (High Priority)
+Split main.js (~7500 lines) into logical modules for better maintainability.
+
+- [ ] Create `entities/fish.js` - Trout, Skellfin, MobiusDickens, Breeder, Feeder, Starcatcher, Crab, Geotle, Beetlemuncher
+- [ ] Create `entities/aliens.js` - Sylvester, Balrog, Gus, Destructor, Missile
+- [ ] Create `entities/pets.js` - Stinky, Niko, Zorf, Itchy, Clyde, Angie
+- [ ] Create `entities/collectibles.js` - Pellet, Coin, Beetle
+- [ ] Update main.js to import from new modules
+- [ ] Verify save/load still works with module structure
+- [ ] Update CLAUDE.md file map with new structure
+
+**Target:** main.js < 2000 lines, each entity module < 1500 lines
+
+### Phase R2: EntityManager System (High Priority)
+Replace 20+ repetitive update/draw loops with a unified entity management system.
+
+- [ ] Create `EntityManager` class with `register()`, `updateAll()`, `drawAll()`, `cleanup()` methods
+- [ ] Define entity interface: `{ update(dt), draw(ctx), state, x, y }`
+- [ ] Migrate fish arrays to EntityManager
+- [ ] Migrate alien arrays to EntityManager
+- [ ] Migrate pet arrays to EntityManager
+- [ ] Migrate collectible arrays (coins, pellets, beetles) to EntityManager
+- [ ] Simplify game loop to single `entityManager.tick(dt, ctx)` call
+- [ ] Add entity type filtering for targeted operations (e.g., `getAll('fish')`)
+
+**Target:** Game loop reduced from ~300 lines to ~50 lines
+
+### Phase R3: Legacy Code Removal (High Priority)
+Remove dual legacy/sprite code paths to reduce complexity by ~30%.
+
+- [ ] Remove legacy `Guppy` class (keep `Trout` only)
+- [ ] Remove legacy `Carnivore` class (keep `Skellfin` only)
+- [ ] Remove legacy `Ultravore` class (keep `MobiusDickens` only)
+- [ ] Remove legacy `Guppycruncher` class (keep `Crab` only)
+- [ ] Remove `guppies[]`, `carnivores[]`, `ultravores[]`, `guppycrunchers[]` arrays
+- [ ] Remove class aliases (Guppy = Trout, etc.)
+- [ ] Update save/load to only use new fish types
+- [ ] Remove legacy shop buttons from index.html
+- [ ] Update CLAUDE.md to remove legacy references
+
+**Target:** Remove ~1000 lines of duplicate code
+
+### Phase R4: Sync Alien Constants (Medium Priority)
+Align ALIEN_STATS in constants.js with actual class implementations.
+
+- [ ] Audit Sylvester class - compare HP, speed, damage to ALIEN_STATS
+- [ ] Audit Balrog class - compare HP, speed, damage to ALIEN_STATS
+- [ ] Audit Gus class - compare feedingsToKill to ALIEN_STATS
+- [ ] Audit Destructor class - compare HP, speed, missileInterval to ALIEN_STATS
+- [ ] Audit Missile class - compare HP, speed to ALIEN_STATS
+- [ ] Refactor alien classes to use `ALIEN_STATS[type]` for all stats
+- [ ] Remove hardcoded values from alien constructors
+
+**Target:** Single source of truth for alien stats
+
+### Phase R5: Centralize Magic Numbers (Medium Priority)
+Move remaining hardcoded values to constants.js.
+
+- [ ] Add `HUNGER` constants: `{ warning: 50, death: 100, full: 10, healRate: 5 }`
+- [ ] Add `SPEED_MULTIPLIERS`: `{ hungryBoost: 1.3, slowSwim: 0.5, fastSwim: 1.5 }`
+- [ ] Add `SEARCH_RADII`: `{ pellet: Infinity, coin: 100, heal: 150, autoCollect: 100 }`
+- [ ] Add `INTERVALS`: fish-specific coin drop timers, spawn timers
+- [ ] Update all fish classes to use centralized constants
+- [ ] Update CLAUDE.md Constants Reference section
+
+**Target:** No magic numbers in entity classes
+
+### Phase R6: Generic Button State Manager (Lower Priority)
+Replace 6 identical pet button update functions with one generic function.
+
+- [ ] Create `updateButtonState(buttonId, cost, isDisabled, customText)` utility
+- [ ] Refactor `updateNikoButtonState()` to use generic function
+- [ ] Refactor `updateZorfButtonState()` to use generic function
+- [ ] Refactor `updateItchyButtonState()` to use generic function
+- [ ] Refactor `updateClydeButtonState()` to use generic function
+- [ ] Refactor `updateAngieButtonState()` to use generic function
+- [ ] Refactor `updateStinkyButtonState()` to use generic function
+- [ ] Consider data-driven button configuration
+
+**Target:** ~50 lines reduced to ~15 lines
 
 ---
 
