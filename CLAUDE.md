@@ -16,6 +16,7 @@ Gigaquarium/
 ├── main.js         # Game logic (TankManager, Guppy, Pellet classes)
 ├── package.json    # npm configuration with Vite
 ├── PRD.md          # Product requirements document
+├── ITERATIONS.md   # Development history and change log
 └── CLAUDE.md       # This file
 ```
 
@@ -23,6 +24,8 @@ Gigaquarium/
 - Use ES6 classes for game entities
 - TankManager handles all boundary logic
 - Game loop uses requestAnimationFrame with delta time
+- **Before starting work:** Check `ITERATIONS.md` and git commits for recent context, and `PRD.md` for current task lists
+- **After completing work:** Document changes in `ITERATIONS.md`
 
 ## Build & Run
 ```bash
