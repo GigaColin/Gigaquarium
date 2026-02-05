@@ -13,9 +13,15 @@ Insaniquarium-style fish tank game where fish swim, get hungry, eat pellets, and
 ```
 Gigaquarium/
 ├── index.html                    # Main HTML with canvas and UI buttons
-├── main.js                       # Core game logic (~7,500 lines)
+├── main.js                       # Core game logic (~2,340 lines)
 ├── fishData.js                   # Fish species configuration data
 ├── constants.js                  # Centralized game constants (costs, timings, thresholds)
+├── entities/                     # Entity modules (Phase R1-R2 complete)
+│   ├── EntityManager.js          # Unified update/draw system (~160 lines)
+│   ├── fish.js                   # All fish classes (~2,500 lines)
+│   ├── aliens.js                 # All alien classes (~1,250 lines)
+│   ├── pets.js                   # All pet classes (~1,150 lines)
+│   └── collectibles.js           # Pellet, Coin, Beetle (~395 lines)
 ├── package.json                  # npm configuration with Vite
 ├── PRD.md                        # Product requirements document
 ├── ITERATIONS.md                 # Development history and change log
@@ -28,98 +34,117 @@ Gigaquarium/
 ### Utility Classes & Functions
 | Lines | Class/Section | Description |
 |-------|---------------|-------------|
-| 1-31 | Image Management | `imageCache`, `preloadFishImages()` |
-| 36-76 | TankManager | Boundary logic, `clampToTank()`, `getRandomPosition()` |
-| 78-130 | Utility Functions | `getDistance()`, `findNearest()`, `moveToward()` |
-| 280-400 | SoundSystem | Web Audio procedural sounds |
-| 400-500 | Particle | Particle effects (bubble, sparkle, blood) |
+| 25-50 | Image Management | `imageCache`, `preloadFishImages()` |
+| 55-95 | TankManager | Boundary logic, `clampToTank()`, `getRandomPosition()` |
+| 98-155 | Utility Functions | `getDistance()`, `findNearest()`, `moveToward()` |
+| 305-420 | SoundSystem | Web Audio procedural sounds |
+| 423-527 | Particle | Particle effects (bubble, sparkle, blood) |
 
 ### Game State
 | Lines | Section | Description |
 |-------|---------|-------------|
-| 132-230 | State Variables | `gold`, arrays for all fish/pets/aliens, upgrade flags |
-| 145-175 | Cost Aliases | Aliases to `constants.js` (TROUT_COST, SKELLFIN_COST, etc.) |
+| 157-255 | State Variables | `gold`, arrays for all fish/pets/aliens, upgrade flags |
+| 171-197 | Cost Aliases | Aliases to `constants.js` (TROUT_COST, SKELLFIN_COST, etc.) |
 
 ### Fish Classes (Sprite-Based)
+
+**entities/fish.js** (All fish classes - ~2500 lines):
 | Lines | Class | Behavior |
 |-------|-------|----------|
-| 887-1082 | Trout | Basic fish, eats pellets, drops silver coins ($15) |
-| 1083-1340 | Skellfin | Predator, hunts Trouts, drops chests ($500) |
-| 1341-1588 | MobiusDickens | Apex predator, hunts Skellfins, drops chests ($1500) |
-| 2353-2589 | Crab | Bottom dweller, jumps to hunt Trouts, drops beetles |
-| 2590-2707 | WardenLamprey | Alien attacker, no hunger, 2 dmg/sec |
-| 2708-2862 | Seeker | Auto-collector, 100px radius |
-| 2863-3049 | Anemone | Healer, -5 hunger/sec to nearby fish |
-| 3050-3243 | Geotle | Breeder, spawns baby Trouts every 25s |
-
-### Legacy/Companion Fish
-| Lines | Class | Description |
-|-------|-------|-------------|
-| 1589-1829 | Breeder | Spawns small guppies |
-| 1830-1975 | Feeder | Autonomous pellet dropper |
-| 1976-2227 | Starcatcher | Star collector, bottom dweller |
-| 3244-3528 | Beetlemuncher | Eats beetles for coins |
+| 39-216 | Trout | Basic fish, eats pellets, drops silver coins ($15) |
+| 221-473 | Skellfin | Predator, hunts Trouts, drops chests ($500) |
+| 478-720 | MobiusDickens | Apex predator, hunts Skellfins, drops chests ($1500) |
+| 730-955 | Breeder | Spawns baby trouts every 20-30s |
+| 960-1105 | Feeder | Drops pellets every 15-20s, doesn't eat |
+| 1110-1357 | Starcatcher | Bottom-dweller, eats stars, drops diamonds |
+| 1362-1594 | Crab | Bottom dweller, jumps to hunt Trouts, drops beetles |
+| 1599-1777 | Geotle | Spawns baby Trouts every 25s |
+| 1782-1897 | WardenLamprey | Alien attacker, no hunger, 2 dmg/sec |
+| 1902-2052 | Seeker | Auto-collector, 100px radius |
+| 2057-2212 | Anemone | Healer, -5 hunger/sec to nearby fish |
+| 2217-2500+ | Beetlemuncher | Green tadpole, hunts beetles, drops pearls |
 
 ### Collectibles
+
+**entities/collectibles.js** (All collectible classes - ~395 lines):
 | Lines | Class | Description |
 |-------|-------|-------------|
-| 2228-2352 | Beetle | Floor-scuttling collectible ($150) |
-| 3529-3563 | Pellet | Food item, sinks with physics |
-| 3564-3769 | Coin | Currency, sinks/floats by type |
+| 28-58 | Pellet | Food item, sinks with physics |
+| 63-266 | Coin | Currency, sinks/floats by type (silver, gold, diamond, star, pearl, treasure) |
+| 271-393 | Beetle | Floor-scuttling collectible ($150) |
 
 ### Aliens
+
+**entities/aliens.js** (All alien classes - ~1,250 lines):
 | Lines | Class | HP | Behavior |
 |-------|-------|-----|----------|
-| 3770-4131 | Sylvester | 50 | Basic alien, eats fish |
-| 4132-4416 | Balrog | 100 | Tough, never gets full |
-| 4417-4708 | Gus | N/A | Fed to death (20 pellets) |
-| 4709-4824 | Missile | 3 | Destructor projectiles |
-| 4825-5011 | Destructor | 80 | Fires homing missiles |
+| 25-437 | Sylvester | 50 | Basic alien, eats fish |
+| 439-727 | Balrog | 100 | Tough, never gets full |
+| 729-1022 | Gus | N/A | Fed to death (20 pellets) |
+| 1024-1139 | Missile | 3 | Destructor projectiles |
+| 1141-1310 | Destructor | 75 | Fires homing missiles |
 
 ### Pets
+
+**entities/pets.js** (All pet classes - ~1,150 lines):
 | Lines | Class | Ability |
 |-------|-------|---------|
-| 5012-5184 | Stinky | Snail, collects floor coins |
-| 5185-5349 | Niko | Seahorse, produces pearls ($250) |
-| 5350-5519 | Zorf | Drops pellets every 8s |
-| 5520-5710 | Itchy | Attacks aliens (2 dmg/sec) |
-| 5711-5874 | Clyde | Collects coins anywhere |
-| 5875-6107 | Angie | Revives one dead fish per attack |
+| 38-209 | Stinky | Snail, collects floor coins |
+| 213-375 | Niko | Seahorse, produces pearls ($500) every 40s |
+| 379-547 | Zorf | Alien pet, drops pellets every 8s |
+| 551-751 | Itchy | Swordfish, attacks aliens (2 dmg/sec) |
+| 755-918 | Clyde | Jellyfish, collects coins anywhere |
+| 921-1157 | Angie | Angel fish, revives one dead fish per attack |
 
-### Core Systems
+### EntityManager (entities/EntityManager.js)
 | Lines | Section | Description |
 |-------|---------|-------------|
-| 463-828 | Save/Load | `saveGame()`, `loadGame()`, `deleteSave()` |
-| 6108-6547 | Game Systems | Alien management, pet system, progression |
-| 6554-6796 | Purchase Functions | All `buy*()` functions |
-| 6872-7228 | Game Loop | `init()`, `gameLoop()`, entity updates |
-| 7229-7539 | UI Drawing | Stats panel, achievements, fish counter |
-| 7467-7541 | Alien Spawning | `spawnAlien()`, warning system |
+| 5-40 | CATEGORY_CONFIG | Removal conditions and draw layers per entity type |
+| 50-170 | EntityManager | `register()`, `updateAll()`, `drawAll()`, `getByCategory()` |
+
+### Core Systems (main.js)
+| Lines | Section | Description |
+|-------|---------|-------------|
+| 257-305 | EntityManager Setup | Array registration, category assignments, context setup |
+| 580-940 | Save/Load | `saveGame()`, `loadGame()`, `deleteSave()` |
+| 1000-1100 | Module Contexts | `setGameContext()`, `setAlienContext()`, `setPetsContext()` |
+| 1110-1200 | Helper Functions | Alien/pet helpers, `getPetCount()`, `canBuyPet()` |
+| 1545-1770 | Purchase Functions | All `buy*()` functions, shop helpers |
+| 1795-1930 | Game Loop | `init()`, `gameLoop()`, EntityManager calls |
+| 1970-2160 | UI Drawing | Stats panel, achievements, fish counter, prestige |
+| 2160-2240 | Alien Functions | `spawnAlien()`, warning display functions |
+| 2240-2360 | Debug Commands | `game.debug.*` console utilities |
 
 ## Common Tasks
 
 ### Adding a New Fish
-1. Create class (~200 lines) following Trout pattern at `main.js:940`
-2. Add species config to `fishData.js`
-3. Add array declaration with other fish arrays (~line 135)
-4. Add cost to `constants.js` COSTS object, create alias in main.js (~line 150)
-5. Create `buy*()` function using `buyFishHelper()` (~line 6610)
-6. Add to game loop update/draw section (~line 7150)
-7. Add to `saveGame()`/`loadGame()` (~line 550)
-8. Add button to `index.html`
+1. Create class (~200 lines) in `entities/fish.js` following Trout pattern
+2. Export the class and add import in `main.js`
+3. Add species config to `fishData.js`
+4. Add array declaration with other fish arrays in main.js (~line 210)
+5. Add cost to `constants.js` COSTS object, create alias in main.js (~line 190)
+6. Register array with EntityManager (~line 270): `entityManager.register('fishname', array, 'fish')`
+7. Create `buy*()` function using `buyFishHelper()` (~line 1690)
+8. Add to `saveGame()`/`loadGame()` (~line 600)
+9. Add to `setGameContext()` arrays (~line 1010) if fish needs game context access
+10. Add button to `index.html`
 
 ### Adding a New Alien
-1. Create class following Sylvester pattern at `main.js:3770`
-2. Add to `spawnAlien()` random selection (~line 7480)
-3. Add to alien update loop in `gameLoop()` (~line 7150)
+1. Create class in `entities/aliens.js` following Sylvester pattern
+2. Export the class and add import in `main.js`
+3. Add to `spawnAlien()` random selection in main.js
+4. EntityManager handles update/draw automatically (aliens array already registered)
 
 ### Adding a New Pet
-1. Create class following Stinky pattern at `main.js:5060`
-2. Add to pet arrays and `getPetCount()` (~line 6185)
-3. Create `buy*()` function using `buyPetHelper()` (~line 6700)
-4. Add cost to `constants.js` COSTS object
-5. Add to save/load system
-6. Add button to `index.html`
+1. Create class in `entities/pets.js` following Stinky pattern
+2. Export the class and add import in `main.js`
+3. Add to pet arrays in main.js and `getPetCount()` (~line 1125)
+4. Register array with EntityManager (~line 290): `entityManager.register('petname', array, 'pet')`
+5. Create `buy*()` function using `buyPetHelper()` (~line 1700)
+6. Add cost to `constants.js` COSTS object
+7. Add to save/load system (~line 600)
+8. Add to `setPetsContext()` in `entities/pets.js` if pet needs game context access
+9. Add button to `index.html`
 
 ### Modifying Fish Behavior
 - Hunger/eating: Use `findNearest(this, pellets)` utility
@@ -168,7 +193,6 @@ npm run build  # Build for production
 | `TIMING` | Time intervals (spawns, coin drops, auto-save) |
 | `THRESHOLDS` | Gameplay limits (max pets, hunger levels, wave trigger) |
 | `ALIEN_STATS` | HP, damage, speed for each alien type |
-| `STAGES` | Legacy evolution stages |
 | `ACHIEVEMENT_DEFS` | Achievement names and descriptions |
 | `PRESTIGE` | Prestige bonus multipliers |
 | `PHYSICS` | Movement speeds for pellets, coins, beetles |
@@ -202,3 +226,10 @@ Read-only state access: `game.state.gold`, `game.state.trouts`, `game.state.alie
 - Fish die if hunger reaches 100
 - Aliens spawn every 2-3 minutes (faster at higher progression)
 - Wave system activates at $10k+ total earned (multiple aliens)
+
+## Completion Checklist (Every Task)
+Before finishing any task, verify:
+- [ ] Code works and has been tested
+- [ ] `ITERATIONS.md` updated with what was done
+- [ ] `CLAUDE.md` updated if file structure or patterns changed
+- [ ] `PRD.md` task checkboxes marked complete if applicable

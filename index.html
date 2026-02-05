@@ -74,7 +74,7 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
-    #buyGuppyBtn {
+    #buyTroutBtn {
       background: linear-gradient(180deg, #ffa500 0%, #ff8c00 100%);
       color: white;
     }
@@ -82,7 +82,7 @@
       background: linear-gradient(180deg, #32cd32 0%, #228b22 100%);
       color: white;
     }
-    #buyCarnivoreBtn {
+    #buySkellfinBtn {
       background: linear-gradient(180deg, #8b0000 0%, #4a0000 100%);
       color: white;
     }
@@ -106,7 +106,7 @@
       background: linear-gradient(180deg, #9370db 0%, #6a5acd 100%);
       color: white;
     }
-    #buyGuppycruncherBtn {
+    #buyCrabBtn {
       background: linear-gradient(180deg, #ff6347 0%, #8b0000 100%);
       color: white;
     }
@@ -114,8 +114,24 @@
       background: linear-gradient(180deg, #32cd32 0%, #006400 100%);
       color: white;
     }
-    #buyUltravoreBtn {
+    #buyMobiusBtn {
       background: linear-gradient(180deg, #708090 0%, #2f4f4f 100%);
+      color: white;
+    }
+    #buyWardenBtn {
+      background: linear-gradient(180deg, #4a0080 0%, #2a0050 100%);
+      color: white;
+    }
+    #buySeekerBtn {
+      background: linear-gradient(180deg, #ff9800 0%, #e65100 100%);
+      color: white;
+    }
+    #buyAnemoneBtn {
+      background: linear-gradient(180deg, #ff69b4 0%, #ff1493 100%);
+      color: white;
+    }
+    #buyGeotleBtn {
+      background: linear-gradient(180deg, #228b22 0%, #006400 100%);
       color: white;
     }
     /* New pet buttons */
@@ -138,6 +154,15 @@
     #buyAngieBtn {
       background: linear-gradient(180deg, #ffd700 0%, #daa520 100%);
       color: white;
+    }
+    #buyAutoCollectBtn {
+      background: linear-gradient(180deg, #4169e1 0%, #1e3a8a 100%);
+      color: white;
+    }
+    #prestigeBtn {
+      background: linear-gradient(180deg, #ffd700 0%, #ff8c00 100%);
+      color: #000;
+      display: none;
     }
     .pet-btn {
       border: 3px solid #ffd700 !important;
@@ -212,17 +237,30 @@
   <div id="topBar">
     <div id="goldDisplay">Gold: <span id="goldAmount">100</span></div>
     <div id="shop">
-      <button class="shop-btn" id="buyGuppyBtn" onclick="buyGuppy()">Guppy ($100)</button>
+      <button class="shop-btn" id="buyTroutBtn" onclick="buyTrout()">Trout ($100)</button>
       <button class="shop-btn" id="upgradeFoodBtn" onclick="upgradeFood()">Food+ ($200)</button>
       <button class="shop-btn" id="buyLaserBtn" onclick="buyLaser()">Laser ($300)</button>
-      <button class="shop-btn" id="buyStinkyBtn" onclick="buyStinky()">Stinky ($500)</button>
+      <button class="shop-btn" id="buyAutoCollectBtn" onclick="buyAutoCollect()">Auto-Collect ($1000)</button>
       <button class="shop-btn" id="buyBreederBtn" onclick="buyBreeder()">Breeder ($750)</button>
-      <button class="shop-btn" id="buyCarnivoreBtn" onclick="buyCarnivore()">Carnivore ($1000)</button>
-      <button class="shop-btn" id="buyGuppycruncherBtn" onclick="buyGuppycruncher()">Cruncher ($800)</button>
+      <button class="shop-btn" id="buySkellfinBtn" onclick="buySkellfin()">Skellfin ($1000)</button>
+      <button class="shop-btn" id="buyCrabBtn" onclick="buyCrab()">Crab ($800)</button>
       <button class="shop-btn" id="buyBeetlemuncherBtn" onclick="buyBeetlemuncher()">Muncher ($1000)</button>
       <button class="shop-btn" id="buyStarcatcherBtn" onclick="buyStarcatcher()">Starcatcher ($1200)</button>
       <button class="shop-btn" id="buyFeederBtn" onclick="buyFeeder()">Feeder ($1500)</button>
-      <button class="shop-btn" id="buyUltravoreBtn" onclick="buyUltravore()">Ultravore ($5000)</button>
+      <button class="shop-btn" id="buyWardenBtn" onclick="buyWarden()">Warden ($2000)</button>
+      <button class="shop-btn" id="buyGeotleBtn" onclick="buyGeotle()">Geotle ($4000)</button>
+      <button class="shop-btn" id="buySeekerBtn" onclick="buySeeker()">Seeker ($5000)</button>
+      <button class="shop-btn" id="buyAnemoneBtn" onclick="buyAnemone()">Anemone ($5000)</button>
+      <button class="shop-btn" id="buyMobiusBtn" onclick="buyMobius()">Mobius ($5000)</button>
+    </div>
+    <div id="petShop">
+      <span id="petCounter">Pets: 0/3</span>
+      <button class="shop-btn pet-btn" id="buyStinkyBtn" onclick="buyStinky()">Stinky ($500)</button>
+      <button class="shop-btn pet-btn" id="buyZorfBtn" onclick="buyZorf()">Zorf ($400)</button>
+      <button class="shop-btn pet-btn" id="buyClydeBtn" onclick="buyClyde()">Clyde ($550)</button>
+      <button class="shop-btn pet-btn" id="buyNikoBtn" onclick="buyNiko()">Niko ($600)</button>
+      <button class="shop-btn pet-btn" id="buyItchyBtn" onclick="buyItchy()">Itchy ($700)</button>
+      <button class="shop-btn pet-btn" id="buyAngieBtn" onclick="buyAngie()">Angie ($2000)</button>
     </div>
   </div>
   <canvas id="gameCanvas" width="800" height="600"></canvas>
@@ -232,6 +270,9 @@
     </div>
     <div id="controls">
       <button class="ctrl-btn active" id="soundBtn" onclick="toggleSound()">Sound: ON</button>
+      <button class="ctrl-btn" id="speedBtn" onclick="toggleSpeed()">Speed: 1x</button>
+      <button class="ctrl-btn" id="statsBtn" onclick="toggleStats()">Stats</button>
+      <button class="ctrl-btn" id="prestigeBtn" onclick="doPrestige()">Prestige</button>
       <button class="ctrl-btn" onclick="saveGame()">Save</button>
       <button class="ctrl-btn" onclick="newGame()">New Game</button>
     </div>

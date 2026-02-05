@@ -162,13 +162,13 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 - [x] Alien Waves: After reaching $10,000 total earned, aliens spawn in pairs
 - [x] Boss Warning: 5-second warning before alien spawns with audio cue
 
-### Phase 15: Quality of Life & Progression
-- [ ] Fish Counter UI: Show count of each fish type in corner
-- [ ] Auto-Collect Upgrade ($1000): Coins within radius of click are collected
-- [ ] Speed Toggle: 1x / 2x game speed button
-- [ ] Statistics Panel: Track total earned, fish lost, aliens defeated
-- [ ] Achievements: Unlock badges for milestones (first King Guppy, defeat 10 aliens, etc.)
-- [ ] Prestige System: Reset with permanent bonuses (start with more gold, faster fish, etc.)
+### Phase 15: Quality of Life & Progression - COMPLETE
+- [x] Fish Counter UI: Show count of each fish type in corner
+- [x] Auto-Collect Upgrade ($1000): Coins within radius of click are collected
+- [x] Speed Toggle: 1x / 2x game speed button
+- [x] Statistics Panel: Track total earned, fish lost, aliens defeated
+- [x] Achievements: Unlock badges for milestones (first fish, defeat 10 aliens, etc.)
+- [x] Prestige System: Reset with permanent bonuses (start with more gold, faster fish, etc.)
 
 ### Phase 16: Virtual Tank Mode
 - [ ] Sandbox Mode: Unlimited money, no aliens, just watch fish
@@ -203,44 +203,72 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 ### Phase R1: Module Split (High Priority)
 Split main.js (~7500 lines) into logical modules for better maintainability.
 
-- [ ] Create `entities/fish.js` - Trout, Skellfin, MobiusDickens, Breeder, Feeder, Starcatcher, Crab, Geotle, Beetlemuncher
-- [ ] Create `entities/aliens.js` - Sylvester, Balrog, Gus, Destructor, Missile
-- [ ] Create `entities/pets.js` - Stinky, Niko, Zorf, Itchy, Clyde, Angie
-- [ ] Create `entities/collectibles.js` - Pellet, Coin, Beetle
-- [ ] Update main.js to import from new modules
-- [ ] Verify save/load still works with module structure
-- [ ] Update CLAUDE.md file map with new structure
-
 **Target:** main.js < 2000 lines, each entity module < 1500 lines
+
+#### R1a: Core Fish Module
+- [x] Create `entities/` directory
+- [x] Create `entities/fish.js` with Trout, Skellfin, MobiusDickens
+- [x] Export classes and update main.js imports
+- [x] Verify game still runs (requires manual testing)
+
+#### R1b: Support Fish Module
+- [x] Add Breeder, Feeder, Starcatcher, Beetlemuncher, Crab, Geotle to `entities/fish.js`
+- [x] Update main.js imports
+- [x] Verify all fish types spawn and behave correctly
+
+#### R1c: Utility Fish Module
+- [x] Add WardenLamprey, Seeker, Anemone to `entities/fish.js`
+- [x] Update main.js imports
+- [x] Verify utility fish abilities work (alien damage, coin collection, healing)
+
+#### R1d: Aliens Module
+- [x] Create `entities/aliens.js` with Sylvester, Balrog, Gus, Destructor, Missile
+- [x] Update main.js imports
+- [x] Verify alien spawning and combat still works
+
+#### R1e: Pets Module
+- [x] Create `entities/pets.js` with Stinky, Niko, Zorf, Itchy, Clyde, Angie
+- [x] Update main.js imports
+- [ ] Verify pet abilities work (requires manual testing)
+
+#### R1f: Collectibles Module
+- [x] Create `entities/collectibles.js` with Pellet, Coin, Beetle
+- [x] Update main.js imports
+- [ ] Verify dropping, sinking, and collection works (requires manual testing)
+
+#### R1g: Final Cleanup
+- [ ] Verify save/load works with module structure (requires manual testing)
+- [x] Update CLAUDE.md file map with new structure
+- [x] Remove any dead code from main.js
 
 ### Phase R2: EntityManager System (High Priority)
 Replace 20+ repetitive update/draw loops with a unified entity management system.
 
-- [ ] Create `EntityManager` class with `register()`, `updateAll()`, `drawAll()`, `cleanup()` methods
-- [ ] Define entity interface: `{ update(dt), draw(ctx), state, x, y }`
-- [ ] Migrate fish arrays to EntityManager
-- [ ] Migrate alien arrays to EntityManager
-- [ ] Migrate pet arrays to EntityManager
-- [ ] Migrate collectible arrays (coins, pellets, beetles) to EntityManager
-- [ ] Simplify game loop to single `entityManager.tick(dt, ctx)` call
-- [ ] Add entity type filtering for targeted operations (e.g., `getAll('fish')`)
+- [x] Create `EntityManager` class with `register()`, `updateAll()`, `drawAll()`, `cleanup()` methods
+- [x] Define entity interface: `{ update(dt), draw(ctx), state, x, y }`
+- [x] Migrate fish arrays to EntityManager
+- [x] Migrate alien arrays to EntityManager
+- [x] Migrate pet arrays to EntityManager
+- [x] Migrate collectible arrays (coins, pellets, beetles) to EntityManager
+- [x] Simplify game loop to single `entityManager.tick(dt, ctx)` call
+- [x] Add entity type filtering for targeted operations (e.g., `getAll('fish')`)
 
-**Target:** Game loop reduced from ~300 lines to ~50 lines
+**Target:** Game loop reduced from ~300 lines to ~50 lines - ACHIEVED
 
-### Phase R3: Legacy Code Removal (High Priority)
+### Phase R3: Legacy Code Removal (High Priority) - COMPLETE
 Remove dual legacy/sprite code paths to reduce complexity by ~30%.
 
-- [ ] Remove legacy `Guppy` class (keep `Trout` only)
-- [ ] Remove legacy `Carnivore` class (keep `Skellfin` only)
-- [ ] Remove legacy `Ultravore` class (keep `MobiusDickens` only)
-- [ ] Remove legacy `Guppycruncher` class (keep `Crab` only)
-- [ ] Remove `guppies[]`, `carnivores[]`, `ultravores[]`, `guppycrunchers[]` arrays
-- [ ] Remove class aliases (Guppy = Trout, etc.)
-- [ ] Update save/load to only use new fish types
-- [ ] Remove legacy shop buttons from index.html
-- [ ] Update CLAUDE.md to remove legacy references
+- [x] Remove legacy `Guppy` class (keep `Trout` only)
+- [x] Remove legacy `Carnivore` class (keep `Skellfin` only)
+- [x] Remove legacy `Ultravore` class (keep `MobiusDickens` only)
+- [x] Remove legacy `Guppycruncher` class (keep `Crab` only)
+- [x] Remove `guppies[]`, `carnivores[]`, `ultravores[]`, `guppycrunchers[]` arrays
+- [x] Remove class aliases (Guppy = Trout, etc.)
+- [x] Update save/load to only use new fish types (with migration for old saves)
+- [x] Remove legacy shop buttons from index.html
+- [x] Update CLAUDE.md to remove legacy references
 
-**Target:** Remove ~1000 lines of duplicate code
+**Target:** Remove ~1000 lines of duplicate code - ACHIEVED
 
 ### Phase R4: Sync Alien Constants (Medium Priority)
 Align ALIEN_STATS in constants.js with actual class implementations.

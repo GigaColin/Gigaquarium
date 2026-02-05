@@ -176,6 +176,259 @@ Development history and change log. Check git commits for additional context.
 - Created ITERATIONS.md to track development progress
 - Migrated Status Log from PRD.md to this file
 
+**Iteration 16:** Phase 18 Complete - New Fish (2026-01-29)
+- Added WardenLamprey class: Attacks aliens dealing 2 damage/sec
+  - Uses sprite from FISH_SPECIES.warden_lamprey
+  - Prioritizes attacking aliens when present, otherwise wanders
+  - No hunger system (doesn't need food)
+  - Cost: $2000
+- Added Seeker class: Auto-collects coins within 100px detection range
+  - Searches for coins and beetles in collectRadius
+  - Fast movement when pursuing collectibles
+  - Cost: $5000
+- Added Anemone class: Heals nearby fish -5 hunger/sec within 80px radius
+  - Heals all fish types (trouts, guppies, skellfins, carnivores, breeders, geotles)
+  - Very slow movement with pulsing animation
+  - Visual healing radius indicator
+  - Cost: $5000
+- Added Geotle class: Spawns baby Trout every 25 seconds
+  - Turtle-like appearance with shell
+  - Eats pellets, spawns Trout when hunger < 70%
+  - Cost: $4000
+- Updated shop UI with 4 new buttons (Warden, Geotle, Seeker, Anemone)
+- Updated save/load system for all new arrays (wardens, seekers, anemones, geotles, trouts, skellfins, mobiuses, crabs)
+- Updated game loop to render all new fish arrays
+- Added preloadFishImages() call in async init()
+- Added legacy STAGES constant for backward compatibility with old saves
+- Added missing legacy fish cost constants
+- Fixed alien spawn timer to consider new fish arrays
+
+**Iteration 18:** Phase 14 Complete - New Aliens (2026-01-30)
+- Added Balrog class: Dark red demon alien with 100 HP, horns, fire aura
+  - Never gets full - keeps eating fish until killed
+  - Drops 8 gold coins on death (more than Sylvester)
+  - Slower but larger than Sylvester
+- Added Gus class: Green bloated creature that cannot be shot
+  - Must be fed 20 pellets to defeat (explodes when full)
+  - Grows/bloats visually as it eats pellets
+  - Slows down as it bloats, displays pellet counter bar
+  - Also hunts fish (prefers pellets when close)
+  - Drops 10 gold coins when defeated
+- Added Destructor class: Tank-like alien at bottom of screen
+  - Fires homing Missile entities at random fish
+  - Missiles can be shot down (3 HP each, click to damage)
+  - Missiles have fire trail and home toward target
+  - 75 HP, drops 7 gold coins on death
+- Added Missile class for Destructor projectiles
+- Added alien warning system:
+  - 5-second countdown before alien spawns
+  - Orange pulsing border and "ALIEN INCOMING IN X..." text
+  - Gives player time to prepare
+- Added alien wave system:
+  - Track totalEarned across coin collections
+  - After $10,000 total earned, aliens spawn in pairs
+  - Random alien type selection for each spawn
+- Added helper functions: findNearestAlien(), hasActiveAlien()
+- Updated combat system to handle multiple aliens and missiles
+- Updated Angie's revive mechanic to work with multiple aliens
+- Updated save/load to persist totalEarned
+- Combat overlay now shows alien-specific instructions
+
+**Iteration 17:** Phase 13 Complete - Expanded Pet System (2026-01-30)
+- Added pet shop UI section to index.html with dedicated #petShop div
+- Added pet counter display showing "Pets: X/3"
+- Moved Stinky button from main shop to pet shop section
+- All 6 pets now have visible buy buttons with golden border styling:
+  - Stinky ($500): Snail that collects floor coins (scaling cost)
+  - Zorf ($400): Alien pet that drops pellets every 8s
+  - Clyde ($550): Jellyfish that collects coins anywhere
+  - Niko ($600): Seahorse that produces pearls every 40s
+  - Itchy ($700): Swordfish that attacks aliens (2 dmg/sec)
+  - Angie ($2000): Angel fish that revives one dead fish per attack
+- Pet limit enforced: MAX_PETS = 3
+- Added updatePetCounter() function to update UI counter
+- Fixed init() to call updateAllPetButtons() for new games
+- Note: Pet classes, buy functions, game loop, and save/load were already implemented in prior uncommitted work
+
+**Iteration 19:** Phase 15 Complete - Quality of Life & Progression (2026-01-30)
+- **Fish Counter UI**: Semi-transparent panel in top-left showing count of each fish type with color coding
+  - Only displays fish types that have been purchased (cleans up UI)
+  - Updates dynamically as fish are bought/die
+- **Speed Toggle (1x/2x)**: Button to toggle game speed
+  - All fish, pets, coins, and particles run at 2x speed
+  - Alien spawn timer uses raw time to maintain balance
+- **Auto-Collect Upgrade ($1000)**: Shop upgrade that collects all coins/beetles within 100px radius on click
+  - Works during combat mode too
+  - Shows visual collection of multiple items at once
+- **Statistics Panel**: Toggle-able overlay showing:
+  - Total earned, coins collected, fish bought, fish lost, aliens defeated
+  - Time played (formatted as hours/minutes/seconds)
+  - Current fish and pet counts
+  - Achievement progress summary
+- **Achievements System**: 7 achievements with popup notifications
+  - First Friend (buy first fish), Predator (buy carnivore), Alien Slayer (defeat 10 aliens)
+  - Millionaire (earn $100k), Full Tank (20+ fish), Pet Lover (all 6 pets), Survivor (30 min played)
+  - Gold popup animation with star icon, 3-second display
+- **Prestige System**: Reset game with permanent bonuses
+  - Unlocks at $50,000 total earned
+  - Prestige points = totalEarned / 10000
+  - +10% starting gold per level, +5% fish speed per level, +5% coin drop rate per level
+  - Prestige indicator shows level and bonuses in corner
+- Updated save/load to persist all new state
+- Added stats tracking: fishBought on all buy functions, totalFishLost on death, aliensDefeated on alien death
+
+**Iteration 20:** PRD Refactoring - Split R1 into sub-phases (2026-01-30)
+- Phase R1 (Module Split) was too large for a single session - context grew quickly
+- Split into 7 discrete sub-phases (R1a through R1g):
+  - R1a: Core fish module (Trout, Skellfin, MobiusDickens)
+  - R1b: Support fish module (Breeder, Feeder, Starcatcher, Beetlemuncher, Crab, Geotle)
+  - R1c: Utility fish module (WardenLamprey, Seeker, Anemone)
+  - R1d: Aliens module (Sylvester, Balrog, Gus, Destructor, Missile)
+  - R1e: Pets module (Stinky, Niko, Zorf, Itchy, Clyde, Angie)
+  - R1f: Collectibles module (Pellet, Coin, Beetle)
+  - R1g: Final cleanup (CLAUDE.md, verify save/load)
+- Each sub-phase is completable in one session with checkpoint verification
+
+**Iteration 21:** Added Completion Checklist to CLAUDE.md (2026-01-30)
+- Added "Completion Checklist (Every Task)" section at bottom of CLAUDE.md
+- Checklist reminds to: test code, update ITERATIONS.md, update CLAUDE.md if needed, mark PRD tasks complete
+- Positioned at end of file so it's seen when wrapping up work
+
+**Iteration 22:** Phase R1a Complete - Core Fish Module (2026-01-30)
+- Created `entities/` directory for modular code organization
+- Extracted Trout, Skellfin, MobiusDickens classes to `entities/fish.js` (716 lines)
+- Implemented game context pattern: `setGameContext()` provides access to shared state
+  - Fish classes access tankManager, imageCache, arrays, Coin, alien, sound, etc. via context
+- main.js reduced from ~7500 to 6915 lines
+- Exported backward compatibility aliases: Guppy = Trout, Carnivore = Skellfin, Ultravore = MobiusDickens
+- Updated main.js imports to use fish module
+
+**Iteration 23:** Phase R1b Complete - Support Fish Module (2026-01-30)
+- Extracted 6 support fish classes to `entities/fish.js`:
+  - Breeder (~230 lines): Spawns baby guppies every 20-30s
+  - Feeder (~150 lines): Drops pellets every 15-20s, doesn't eat
+  - Starcatcher (~250 lines): Bottom-dweller, eats stars, drops diamonds
+  - Beetlemuncher (~280 lines): Green tadpole, hunts beetles, drops pearls
+  - Crab (~230 lines): Bottom-dweller, jumps to hunt trouts, drops beetles
+  - Geotle (~180 lines): Spawns baby trouts every 25s
+- Extended game context with additional arrays: breeders, feeders, starcatchers, beetlemunchers, crabs, geotles, beetles
+- Added Pellet class to game context for Feeder fish
+- Added Guppycruncher alias (= Crab) for backward compatibility
+- main.js reduced by ~1400 lines (from ~6900 to ~5500 lines)
+- entities/fish.js expanded to ~1900 lines with all support fish
+
+**Iteration 24:** Phase R1c Complete - Utility Fish Module (2026-01-30)
+- Extracted 3 utility fish classes to `entities/fish.js`:
+  - WardenLamprey (~115 lines): Attacks aliens, deals 2 damage/sec, no hunger
+  - Seeker (~155 lines): Auto-collects coins within radius, no hunger
+  - Anemone (~160 lines): Heals nearby fish (-5 hunger/sec), very slow movement
+- Adapted classes to use game context pattern (`ctx.getAlien()`, `ctx.tankManager`, etc.)
+- Added gold management functions to game context: getGold, setGold, addGold, getTotalEarned, addTotalEarned, updateGoldDisplay
+- Removed ~460 lines of duplicate code from main.js
+- entities/fish.js expanded to ~2500 lines with all fish classes
+
+**Iteration 25:** Phase R1d Complete - Aliens Module (2026-01-30)
+- Created `entities/aliens.js` with 5 alien classes (~1250 lines):
+  - Sylvester (~415 lines): Basic alien, 50 HP, hunts fish, drops 5 gold coins
+  - Balrog (~290 lines): Tougher alien, 100 HP, never gets full, drops 8 gold coins
+  - Gus (~295 lines): Cannot be shot, must be fed 20 pellets to defeat, drops 10 gold coins
+  - Missile (~115 lines): Homing projectile fired by Destructor, 3 HP
+  - Destructor (~145 lines): Tank-like alien at bottom, fires missiles, 75 HP
+- Implemented `setAlienContext()` pattern to provide shared state access:
+  - tankManager, sound, spawnParticles, stats, getAngie(), arrays, Coin class
+- Updated main.js imports to use aliens module
+- Removed ~1200 lines from main.js (5134 -> 3937 lines)
+- Renamed `ctx` parameter to `canvasCtx` in draw() methods to avoid confusion with game context
+
+**Iteration 26:** Phase R1e & R1f Complete - Pets and Collectibles Modules (2026-02-01)
+- Integrated `entities/pets.js` module with 6 pet classes (~1150 lines):
+  - Stinky: Floor coin collector snail
+  - Niko: Seahorse pearl producer ($500 every 40s)
+  - Zorf: Alien pet food dropper (pellet every 8s)
+  - Itchy: Swordfish alien attacker (2 dmg/sec)
+  - Clyde: Jellyfish coin collector (anywhere in tank)
+  - Angie: Angel fish that revives one fish per attack
+- Integrated `entities/collectibles.js` module with 3 classes (~395 lines):
+  - Pellet: Food item with upgraded variant
+  - Coin: Currency (silver, gold, diamond, star, pearl, treasure)
+  - Beetle: Floor-scuttling collectible ($150)
+- Implemented context patterns for both modules:
+  - `setPetsContext()`: tankManager, coins, aliens, pellets, gold accessors, sound, etc.
+  - `setCollectiblesContext()`: tankManager, foodUpgraded, COIN_TYPES
+  - `updateFoodUpgradedStatus()`: Syncs food upgrade state with module
+- Updated pets.js to use function-based gold accessors (addGold, addTotalEarned)
+- Added `initPetsContext()` call in init() function
+- Removed ~1460 lines of duplicate class definitions from main.js (3986 -> 2528 lines)
+- main.js now under 2600 lines (target was <2000, close!)
+
+**Iteration 27:** Phase R1g - Final Cleanup (2026-02-01)
+- Removed dead comments and placeholder code from main.js:
+  - Removed "NOTE:" comments about moved classes
+  - Removed "PLACEHOLDER" section for moved entities
+  - Removed redundant import comments
+- main.js reduced from 2531 to 2517 lines
+- Updated CLAUDE.md file map with accurate line numbers:
+  - TankManager at 55-95
+  - SoundSystem at 305-420
+  - Particle at 423-527
+  - Save/Load at 530-890
+  - Module Contexts at 950-1050
+  - Purchase Functions at 1495-1720
+  - Game Loop at 1750-2105
+  - UI Drawing at 2155-2345
+  - Debug Commands at 2420-2520
+- Updated "Adding a New Fish" and "Adding a New Pet" tasks with correct line references
+- Phase R1 (Module Split) is now complete except for manual testing verification
+
+**Iteration 28:** Phase R2 Complete - EntityManager System (2026-02-01)
+- Created `entities/EntityManager.js` (~160 lines) with unified entity management:
+  - `CATEGORY_CONFIG` defines removal conditions and draw layers for each entity type
+  - `register(name, array, category)` - registers entity arrays with the manager
+  - `setContext(context)` - provides special update args (missiles for Destructor)
+  - `updateAll(dt)` - updates all entities and removes dead ones
+  - `drawAll(ctx)` - draws entities in layer order (0=pellets, 6=particles)
+  - `getByCategory(category)` - query entities by type
+  - `getArray(name)` - get specific array by name
+- Registered 25+ entity arrays in main.js with categories:
+  - fish: trouts, skellfins, mobiuses, crabs, breeders, starcatchers, beetlemunchers, geotles, guppies, carnivores, ultravores, guppycrunchers
+  - permanentFish: wardens, feeders, seekers, anemones
+  - pellet, coin, beetle: collectibles
+  - alien, missile: combat entities
+  - pet: stinkies, nikos, zorfs, itchys, clydes
+  - particle: visual effects
+- Draw layer order: 0=pellets, 1=beetles, 2=fish, 3=coins, 4=pets, 5=aliens/missiles, 6=particles
+- Angie singleton handled separately (not in array system)
+- **Game loop reduced from ~250 lines to ~25 lines** (target was 50, exceeded!)
+- main.js reduced from ~2570 to ~2340 lines (230 lines saved)
+- Save/load compatibility maintained - EntityManager references existing arrays
+
+**Iteration 29:** Phase R3 Complete - Legacy Code Removal (2026-02-02)
+- Removed all legacy class aliases from `entities/fish.js`:
+  - Removed `Guppy = Trout`, `Carnivore = Skellfin`, `Ultravore = MobiusDickens`, `Guppycruncher = Crab`
+- Removed legacy arrays from `main.js`:
+  - Removed `guppies[]`, `carnivores[]`, `ultravores[]`, `guppycrunchers[]`
+  - Removed legacy cost aliases (GUPPY_COST, CARNIVORE_COST, etc.)
+  - Removed EntityManager registrations for legacy arrays
+- Updated save/load system:
+  - Removed legacy fish from saveGame()
+  - Added migration in loadGame() to convert old saves (guppies→trouts, carnivores→skellfins, etc.)
+- Updated all context providers:
+  - Removed legacy arrays from `setGameContext()` and `setAlienContext()`
+  - Updated `entities/fish.js` and `entities/aliens.js` to use only new fish types
+- Updated buy functions:
+  - Renamed `buyGuppy()` → `buyTrout()`, `buyCarnivore()` → `buySkellfin()`
+  - Renamed `buyGuppycruncher()` → `buyCrab()`, `buyUltravore()` → `buyMobius()`
+- Updated `index.html`:
+  - Renamed buttons and CSS IDs to match new fish names
+- Updated helper functions:
+  - `getTotalFishCount()`, `checkAchievements()`, `doPrestige()`, `drawFishCounterUI()`, `hasFish` check
+- Updated fish behavior:
+  - Breeder now spawns Trouts instead of Guppies
+  - Anemone healing simplified to use only current fish arrays
+  - Alien targeting uses only current fish arrays
+- Code reduction: Removed ~800 lines of duplicate/legacy code
+- Backward compatibility: Old saves automatically migrate to new fish types on load
+
 ---
 
 <!-- Template for new entries:

@@ -42,36 +42,63 @@ Migrating from canvas-drawn fish to sprite-based fish loaded from IPFS URLs.
 - Draw method uses sprite with fallback
 - Added `const Ultravore = MobiusDickens;` alias
 
-## NOT YET COMPLETED
+### 6. Replaced Guppycruncher Class with Crab Class
+- New sprite-based `Crab` class using `imageCache['crab']`
+- Updated constructor to use SIZE_CONFIG and FISH_SPECIES.crab
+- Updated coin production to use species config (beetle coins)
+- Renamed `findSmallGuppy()` to `findTrout()` - searches both `trouts` and `guppies` arrays
+- Draw method uses sprite with fallback colored shape
+- Added `const Guppycruncher = Crab;` alias for backward compatibility
 
-### Still Need To Do:
-1. **Guppycruncher -> Crab**: Need to find and update this class (search showed no matches - may have been removed or renamed already)
+### 7. Fixed Skellfin Class Syntax Error
+- Removed premature closing brace that left update() and draw() outside the class
 
-2. **Add Special Fish Classes** (Task #5):
-   - WardenLamprey (attacks aliens, 2 dmg/sec)
-   - Seeker (auto-collects coins in range)
-   - Anemone (heals nearby fish -5 hunger/sec)
-   - Geotle (spawns baby Trout every 25s)
+## PHASE 17 COMPLETE ✓
 
-3. **Update Shop System** (Task #6):
-   - Update index.html buttons with new names/costs
-   - Update buy functions in main.js
+All 4 fish classes have been migrated to sprite-based rendering:
+- Trout (was Guppy)
+- Skellfin (was Carnivore)
+- MobiusDickens (was Ultravore)
+- Crab (was Guppycruncher)
 
-4. **Update Save/Load System** (Task #7):
-   - Modify saveGame() and loadGame() for new fish types
-   - Remove evolution data (stage, timesEaten)
+## PHASE 18 COMPLETE ✓
 
-5. **Update PRD.md** (Task #8):
-   - Add Phase 17 documentation
-   - Update fish table
+All 4 new special fish classes have been added:
 
-6. **Update Game Loop**:
-   - Add rendering loops for new fish arrays (trouts, skellfins, mobiuses, etc.)
-   - Call preloadFishImages() in init()
+1. **WardenLamprey** - Attacks aliens, deals 2 damage/sec
+   - Uses sprite from imageCache['warden_lamprey']
+   - No hunger system - just attacks aliens
+   - Cost: $2000
 
-7. **Update init() function**:
-   - Call `await preloadFishImages()` before game starts
-   - Show loading state while images load
+2. **Seeker** - Auto-collects coins within 100px range
+   - Uses sprite from imageCache['seeker']
+   - Collects coins and beetles automatically
+   - Cost: $5000
+
+3. **Anemone** - Heals nearby fish (-5 hunger/sec) within 80px
+   - Uses sprite from imageCache['anemone']
+   - Heals all fish types in radius
+   - Very slow movement, pulsing animation
+   - Cost: $5000
+
+4. **Geotle** - Spawns baby Trout every 25 seconds
+   - Uses sprite from imageCache['geotle']
+   - Eats pellets like other fish
+   - Cost: $4000
+
+### Shop System Updated:
+- index.html has 4 new buttons (Warden, Geotle, Seeker, Anemone)
+- main.js has buyWarden(), buySeeker(), buyAnemone(), buyGeotle() functions
+- All exposed to window object for onclick handlers
+
+### Save/Load System Updated:
+- saveGame() includes wardens, seekers, anemones, geotles, trouts, skellfins, mobiuses, crabs
+- loadGame() restores all new fish arrays
+
+### Game Loop Updated:
+- All new arrays have update/draw loops
+- preloadFishImages() called in async init()
+- Alien spawn timer considers new fish arrays
 
 ## File Locations
 - `/Users/colinmagerle/Documents/Claude Workspace/Gigaquarium/fishData.js` - NEW
