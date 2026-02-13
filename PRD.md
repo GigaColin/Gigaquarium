@@ -14,7 +14,7 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 | Entity | Food Source | Drops | Notes |
 |--------|-------------|-------|-------|
 | Trout | Pellets | Silver ($15) | Basic fish, no evolution |
-| Skellfin | Trouts | Diamond ($200) | Predator, attacks aliens |
+| Skellfin | Trouts | Chest ($500) | Predator, attacks aliens |
 | MobiusDickens | Skellfins | Chest ($1500) | Apex predator, slow but high value |
 | Crab | Trouts | Beetle ($150) | Bottom-dweller, jumps to catch fish |
 | Breeder | Pellets | None | Spawns baby Trouts over time |
@@ -47,7 +47,7 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 | Pet | Cost | Ability |
 |-----|------|---------|
 | Stinky | $500+ | Snail that collects floor coins |
-| Niko | $600 | Produces pearls ($250) every 40s |
+| Niko | $600 | Produces pearls ($500) every 40s |
 | Zorf | $400 | Drops food pellets every 8s |
 | Itchy | $700 | Attacks aliens (2 dmg/sec) |
 | Clyde | $550 | Collects coins anywhere (not just floor) |
@@ -195,6 +195,16 @@ A high-fidelity web recreation of the "Feed-Grow-Collect" loop. Prioritize "game
 - [x] Update save/load system for new fish types (remove evolution data)
 - [x] Update game loop to render new fish arrays
 - [x] Call preloadFishImages() in init() with loading state
+
+### Phase 19: Balance
+- [x] Progressive alien spawning (Sylvester only early, unlock Gus/Balrog/Destructor by totalEarned)
+- [x] Scaled alien spawn timer (120-180s early game, ramps down to 60-90s)
+- [x] Early-game Sylvester HP reduction (30 HP when totalEarned < $1,000)
+- [x] Alien knockback on click (directional impulse, laser pushes harder)
+- [x] Trout growth stages (small -> medium -> large via feeding, gold coins at large)
+- [x] Fish grab delay (0.5s beingEatenTimer on non-carnivore fish)
+- [x] Wave threshold increased from $10k to $15k
+- [x] Save/load persistence for trout stage and feedCount
 
 ---
 

@@ -72,7 +72,7 @@ export const TIMING = {
 // Gameplay Thresholds
 // ============================================
 export const THRESHOLDS = {
-  waveSpawn: 10000,           // Total earned to trigger wave spawns
+  waveSpawn: 15000,           // Total earned to trigger wave spawns
   maxPets: 3,                 // Maximum pets allowed
   autoCollectRadius: 100,    // Auto-collect upgrade radius
   hungerWarning: 50,         // Hunger level when fish turns red
@@ -90,6 +90,51 @@ export const ALIEN_STATS = {
   gus: { hp: null, damage: 1, speed: 20, feedingsToKill: 20 },
   destructor: { hp: 80, damage: 1, speed: 15, missileInterval: 3 },
   missile: { hp: 3, damage: 1, speed: 120 }
+};
+
+// ============================================
+// Alien Progression (unlocks by totalEarned)
+// ============================================
+export const ALIEN_PROGRESSION = [
+  { type: 'sylvester', minEarned: 0 },
+  { type: 'gus', minEarned: 3000 },
+  { type: 'balrog', minEarned: 7000 },
+  { type: 'destructor', minEarned: 15000 }
+];
+
+// ============================================
+// Alien Scaling (early-game HP reduction)
+// ============================================
+export const ALIEN_SCALING = {
+  sylvesterReducedHp: 30,       // Sylvester HP when totalEarned < $1,000
+  sylvesterReducedThreshold: 1000
+};
+
+// ============================================
+// Alien Spawn Timer Scaling
+// ============================================
+export const ALIEN_SPAWN_SCALING = [
+  { maxEarned: 1000, min: 120, max: 180 },
+  { maxEarned: 5000, min: 90, max: 120 },
+  { maxEarned: Infinity, min: 60, max: 90 }
+];
+
+// ============================================
+// Knockback Constants
+// ============================================
+export const KNOCKBACK = {
+  force: 150,
+  laserForce: 250,
+  decay: 5
+};
+
+// ============================================
+// Trout Growth Stages
+// ============================================
+export const TROUT_GROWTH = {
+  small: { size: 35, speed: 80, feedingsToGrow: 3, coinType: 'silver', coinValue: 15 },
+  medium: { size: 55, speed: 65, feedingsToGrow: 5, coinType: 'silver', coinValue: 15 },
+  large: { size: 70, speed: 55, feedingsToGrow: null, coinType: 'gold', coinValue: 35 }
 };
 
 // ============================================

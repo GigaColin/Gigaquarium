@@ -1,6 +1,8 @@
 // Gigaquarium - Aliens Module
 // Alien classes: Sylvester, Balrog, Gus, Destructor, Missile
 
+import { KNOCKBACK } from '../constants.js';
+
 // Game context - set by main.js via setAlienContext()
 let ctx = null;
 
@@ -61,6 +63,10 @@ export class Sylvester {
     this.wobble = 0;
     this.hurtTimer = 0;
 
+    // Knockback
+    this.knockbackVx = 0;
+    this.knockbackVy = 0;
+
     // Entry animation
     this.entering = true;
     this.entryTimer = 0;
@@ -69,6 +75,18 @@ export class Sylvester {
   update(dt) {
     this.wobble += dt * 5;
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
+
+    // Apply knockback
+    if (this.knockbackVx !== 0 || this.knockbackVy !== 0) {
+      this.x += this.knockbackVx * dt;
+      this.y += this.knockbackVy * dt;
+      this.knockbackVx *= Math.exp(-KNOCKBACK.decay * dt);
+      this.knockbackVy *= Math.exp(-KNOCKBACK.decay * dt);
+      if (Math.abs(this.knockbackVx) < 1 && Math.abs(this.knockbackVy) < 1) {
+        this.knockbackVx = 0;
+        this.knockbackVy = 0;
+      }
+    }
 
     // Entry animation - warp in
     if (this.entering) {
@@ -180,9 +198,19 @@ export class Sylvester {
     return nearest;
   }
 
-  takeDamage() {
+  takeDamage(clickX, clickY, isLaser) {
     this.health--;
     this.hurtTimer = 0.1;
+
+    // Apply knockback from click point
+    if (clickX !== undefined && clickY !== undefined) {
+      const dx = this.x - clickX;
+      const dy = this.y - clickY;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const force = isLaser ? KNOCKBACK.laserForce : KNOCKBACK.force;
+      this.knockbackVx += (dx / dist) * force;
+      this.knockbackVy += (dy / dist) * force;
+    }
 
     if (this.health <= 0) {
       this.die();
@@ -359,11 +387,27 @@ export class Balrog {
     this.hurtTimer = 0;
     this.entering = true;
     this.entryTimer = 0;
+
+    // Knockback
+    this.knockbackVx = 0;
+    this.knockbackVy = 0;
   }
 
   update(dt) {
     this.wobble += dt * 4;
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
+
+    // Apply knockback
+    if (this.knockbackVx !== 0 || this.knockbackVy !== 0) {
+      this.x += this.knockbackVx * dt;
+      this.y += this.knockbackVy * dt;
+      this.knockbackVx *= Math.exp(-KNOCKBACK.decay * dt);
+      this.knockbackVy *= Math.exp(-KNOCKBACK.decay * dt);
+      if (Math.abs(this.knockbackVx) < 1 && Math.abs(this.knockbackVy) < 1) {
+        this.knockbackVx = 0;
+        this.knockbackVy = 0;
+      }
+    }
 
     if (this.entering) {
       this.entryTimer += dt;
@@ -464,9 +508,20 @@ export class Balrog {
     return nearest;
   }
 
-  takeDamage() {
+  takeDamage(clickX, clickY, isLaser) {
     this.health--;
     this.hurtTimer = 0.1;
+
+    // Apply knockback from click point
+    if (clickX !== undefined && clickY !== undefined) {
+      const dx = this.x - clickX;
+      const dy = this.y - clickY;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const force = isLaser ? KNOCKBACK.laserForce : KNOCKBACK.force;
+      this.knockbackVx += (dx / dist) * force;
+      this.knockbackVy += (dy / dist) * force;
+    }
+
     if (this.health <= 0) {
       this.die();
     }
@@ -912,9 +967,25 @@ export class Missile {
     this.health = 3;
     this.dead = false;
     this.trail = [];
+
+    // Knockback
+    this.knockbackVx = 0;
+    this.knockbackVy = 0;
   }
 
   update(dt) {
+    // Apply knockback
+    if (this.knockbackVx !== 0 || this.knockbackVy !== 0) {
+      this.x += this.knockbackVx * dt;
+      this.y += this.knockbackVy * dt;
+      this.knockbackVx *= Math.exp(-KNOCKBACK.decay * dt);
+      this.knockbackVy *= Math.exp(-KNOCKBACK.decay * dt);
+      if (Math.abs(this.knockbackVx) < 1 && Math.abs(this.knockbackVy) < 1) {
+        this.knockbackVx = 0;
+        this.knockbackVy = 0;
+      }
+    }
+
     // Add trail
     this.trail.push({ x: this.x, y: this.y, alpha: 1 });
     if (this.trail.length > 10) this.trail.shift();
@@ -961,8 +1032,19 @@ export class Missile {
     }
   }
 
-  takeDamage() {
+  takeDamage(clickX, clickY, isLaser) {
     this.health--;
+
+    // Apply knockback from click point
+    if (clickX !== undefined && clickY !== undefined) {
+      const dx = this.x - clickX;
+      const dy = this.y - clickY;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const force = isLaser ? KNOCKBACK.laserForce : KNOCKBACK.force;
+      this.knockbackVx += (dx / dist) * force;
+      this.knockbackVy += (dy / dist) * force;
+    }
+
     if (this.health <= 0) {
       this.dead = true;
       ctx.sound.play('hit');
@@ -1038,11 +1120,27 @@ export class Destructor {
     this.entryTimer = 0;
     this.fireTimer = 3;  // Fire every 3 seconds
     this.fireRate = 3;
+
+    // Knockback
+    this.knockbackVx = 0;
+    this.knockbackVy = 0;
   }
 
   update(dt, missiles) {
     this.wobble += dt * 3;
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
+
+    // Apply knockback
+    if (this.knockbackVx !== 0 || this.knockbackVy !== 0) {
+      this.x += this.knockbackVx * dt;
+      this.y += this.knockbackVy * dt;
+      this.knockbackVx *= Math.exp(-KNOCKBACK.decay * dt);
+      this.knockbackVy *= Math.exp(-KNOCKBACK.decay * dt);
+      if (Math.abs(this.knockbackVx) < 1 && Math.abs(this.knockbackVy) < 1) {
+        this.knockbackVx = 0;
+        this.knockbackVy = 0;
+      }
+    }
 
     if (this.entering) {
       this.entryTimer += dt;
@@ -1086,9 +1184,20 @@ export class Destructor {
     return aliveFish[Math.floor(Math.random() * aliveFish.length)];
   }
 
-  takeDamage() {
+  takeDamage(clickX, clickY, isLaser) {
     this.health--;
     this.hurtTimer = 0.1;
+
+    // Apply knockback from click point
+    if (clickX !== undefined && clickY !== undefined) {
+      const dx = this.x - clickX;
+      const dy = this.y - clickY;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const force = isLaser ? KNOCKBACK.laserForce : KNOCKBACK.force;
+      this.knockbackVx += (dx / dist) * force;
+      this.knockbackVy += (dy / dist) * force;
+    }
+
     if (this.health <= 0) {
       this.die();
     }

@@ -1,7 +1,7 @@
 // Gigaquarium - Main Game File
 
 import { FISH_SPECIES, SIZE_CONFIG, RARITY_COLORS } from './fishData.js';
-import { COSTS, VALUES, TIMING, THRESHOLDS, PRESTIGE, PHYSICS } from './constants.js';
+import { COSTS, VALUES, TIMING, THRESHOLDS, PRESTIGE, PHYSICS, ALIEN_PROGRESSION, ALIEN_SCALING, ALIEN_SPAWN_SCALING, TROUT_GROWTH } from './constants.js';
 import {
   Trout, Skellfin, MobiusDickens,
   Breeder, Feeder, Starcatcher, Beetlemuncher, Crab, Geotle,
@@ -230,7 +230,8 @@ const MAX_PETS = THRESHOLDS.maxPets;
 // Alien system
 let alien = null;
 let aliens = [];  // Support multiple aliens for waves
-let alienSpawnTimer = TIMING.alienSpawnMin + Math.random() * (TIMING.alienSpawnMax - TIMING.alienSpawnMin);
+// Initial spawn timer will be set properly after game loads (uses ALIEN_SPAWN_SCALING)
+let alienSpawnTimer = 120 + Math.random() * 60; // Default to early-game timing
 let alienWarningTimer = 0;
 let alienWarningActive = false;
 let totalEarned = 0;  // Track total gold earned for wave triggers
@@ -616,7 +617,9 @@ function saveGame() {
     trouts: trouts.map(t => ({
       x: t.x,
       y: t.y,
-      hunger: t.hunger
+      hunger: t.hunger,
+      stage: t.stage,
+      feedCount: t.feedCount
     })),
     skellfins: skellfins.map(s => ({
       x: s.x,
@@ -712,10 +715,10 @@ function loadGame() {
     }
     updateStinkyButtonState();
 
-    // Migrate legacy guppies to trouts
+    // Migrate legacy guppies to trouts (start as small)
     if (saveData.guppies) {
       for (const gData of saveData.guppies) {
-        const trout = new Trout(gData.x, gData.y);
+        const trout = new Trout(gData.x, gData.y, 'small');
         trout.hunger = Math.min(gData.hunger || 0, 50);
         trouts.push(trout);
       }
@@ -863,8 +866,9 @@ function loadGame() {
     // Restore new sprite-based arrays
     if (saveData.trouts) {
       for (const tData of saveData.trouts) {
-        const trout = new Trout(tData.x, tData.y);
+        const trout = new Trout(tData.x, tData.y, tData.stage || 'small');
         trout.hunger = Math.min(tData.hunger || 0, 50);
+        trout.feedCount = tData.feedCount || 0;
         trouts.push(trout);
       }
     }
@@ -1376,7 +1380,7 @@ canvas.addEventListener('click', (e) => {
       if (missiles[i].isClicked(x, y)) {
         const damage = laserUpgraded ? 3 : 1;
         for (let d = 0; d < damage; d++) {
-          missiles[i].takeDamage();
+          missiles[i].takeDamage(x, y, laserUpgraded);
         }
         sound.play('hit');
         spawnParticles(x, y, 'sparkle', 5);
@@ -1392,7 +1396,7 @@ canvas.addEventListener('click', (e) => {
         if (a.isClicked(x, y)) {
           const damage = laserUpgraded ? 3 : 1;
           for (let d = 0; d < damage; d++) {
-            a.takeDamage();
+            a.takeDamage(x, y, laserUpgraded);
           }
           sound.play('hit');
           spawnParticles(x, y, 'blood', laserUpgraded ? 15 : 8);
@@ -2109,11 +2113,19 @@ function drawPrestigeIndicator() {
   }
 }
 
-function spawnAlien() {
-  // Pick random alien type
-  const alienTypes = ['sylvester', 'balrog', 'gus', 'destructor'];
-  const type = alienTypes[Math.floor(Math.random() * alienTypes.length)];
+/**
+ * Get available alien types based on totalEarned progression
+ */
+function getAvailableAlienTypes() {
+  return ALIEN_PROGRESSION
+    .filter(entry => totalEarned >= entry.minEarned)
+    .map(entry => entry.type);
+}
 
+/**
+ * Create an alien by type string
+ */
+function createAlienByType(type) {
   let newAlien;
   switch (type) {
     case 'balrog':
@@ -2128,33 +2140,49 @@ function spawnAlien() {
     default:
       newAlien = new Sylvester();
   }
+  // Early-game Sylvester gets reduced HP
+  if (type === 'sylvester' && totalEarned < ALIEN_SCALING.sylvesterReducedThreshold) {
+    newAlien.health = ALIEN_SCALING.sylvesterReducedHp;
+    newAlien.maxHealth = ALIEN_SCALING.sylvesterReducedHp;
+  }
+  return newAlien;
+}
+
+/**
+ * Get alien spawn timing based on totalEarned progression
+ */
+function getAlienSpawnTiming() {
+  for (const tier of ALIEN_SPAWN_SCALING) {
+    if (totalEarned < tier.maxEarned) {
+      return { min: tier.min, max: tier.max };
+    }
+  }
+  // Fallback to last tier
+  const last = ALIEN_SPAWN_SCALING[ALIEN_SPAWN_SCALING.length - 1];
+  return { min: last.min, max: last.max };
+}
+
+function spawnAlien() {
+  // Pick random alien type from available pool based on progression
+  const availableTypes = getAvailableAlienTypes();
+  const type = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+
+  const newAlien = createAlienByType(type);
 
   // Use the legacy single alien variable for backward compatibility
   alien = newAlien;
   aliens.push(newAlien);
 
-  // Spawn second alien if wave mode (total earned > $10,000)
+  // Spawn second alien if wave mode
   if (totalEarned >= WAVE_THRESHOLD) {
-    const type2 = alienTypes[Math.floor(Math.random() * alienTypes.length)];
-    let secondAlien;
-    switch (type2) {
-      case 'balrog':
-        secondAlien = new Balrog();
-        break;
-      case 'gus':
-        secondAlien = new Gus();
-        break;
-      case 'destructor':
-        secondAlien = new Destructor();
-        break;
-      default:
-        secondAlien = new Sylvester();
-    }
+    const type2 = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+    const secondAlien = createAlienByType(type2);
     aliens.push(secondAlien);
   }
 
-  // Reset spawn timer for next wave
-  alienSpawnTimer = ALIEN_SPAWN_MIN + Math.random() * (ALIEN_SPAWN_MAX - ALIEN_SPAWN_MIN);
+  // Reset spawn timer based on progression scaling
+  const timing = getAlienSpawnTiming();
+  alienSpawnTimer = timing.min + Math.random() * (timing.max - timing.min);
 }
 
 function showBossWarning() {
@@ -2194,13 +2222,9 @@ window.game = {
     spawnAlien: (type = 'random') => {
       const types = ['sylvester', 'balrog', 'gus', 'destructor'];
       const chosen = type === 'random' ? types[Math.floor(Math.random() * types.length)] : type;
-      let newAlien;
-      switch(chosen) {
-        case 'balrog': newAlien = new Balrog(); break;
-        case 'gus': newAlien = new Gus(); break;
-        case 'destructor': newAlien = new Destructor(); break;
-        default: newAlien = new Sylvester();
-      }
+      const newAlien = createAlienByType(chosen);
+      // Debug spawns bypass HP reduction
+      if (chosen === 'sylvester') { newAlien.health = 50; newAlien.maxHealth = 50; }
       aliens.push(newAlien);
       showAlienWarning();
       console.log(`Spawned ${chosen}`);
@@ -2236,7 +2260,7 @@ window.game = {
     // Game state
     setSpeed: (speed) => { gameSpeed = speed; console.log(`Game speed set to ${speed}x`); },
     resetAlienTimer: () => { alienSpawnTimer = 5; console.log('Alien spawning in 5 seconds'); },
-    skipToWave: () => { totalEarned = 10000; console.log('Total earned set to $10,000 (wave mode)'); },
+    skipToWave: () => { totalEarned = 15000; console.log('Total earned set to $15,000 (wave mode)'); },
 
     // Info
     status: () => {

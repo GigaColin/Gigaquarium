@@ -3,6 +3,7 @@
 // Support fish classes: Breeder, Feeder, Starcatcher, Beetlemuncher, Crab, Geotle
 
 import { FISH_SPECIES, SIZE_CONFIG, RARITY_COLORS } from '../fishData.js';
+import { TROUT_GROWTH } from '../constants.js';
 
 // Game context - set by main.js via setGameContext()
 let ctx = null;
@@ -37,15 +38,12 @@ export function setGameContext(gameContext) {
 // Trout Class (Basic Fish - Sprite Based)
 // ============================================
 export class Trout {
-  constructor(x, y) {
+  constructor(x, y, stage = 'small') {
     this.x = x;
     this.y = y;
     this.targetX = x;
     this.targetY = y;
     this.species = 'trout';
-    const sizeConfig = SIZE_CONFIG[FISH_SPECIES.trout.size];
-    this.size = sizeConfig.pixelSize;
-    this.speed = sizeConfig.speed + Math.random() * 20;
     this.hunger = 0;
     this.state = 'wandering';
     this.facingLeft = false;
@@ -54,11 +52,28 @@ export class Trout {
     // Death animation
     this.deathTimer = 0;
 
-    // Coin dropping - silver coins
+    // Growth stages
+    this.stage = stage;
+    this.feedCount = 0;
+
+    // Apply stage-specific stats
+    this.applyStageStats();
+
+    // Coin dropping timer
     const [minInterval, maxInterval] = FISH_SPECIES.trout.coinDropInterval;
     this.coinTimer = minInterval + Math.random() * (maxInterval - minInterval);
-    this.coinType = FISH_SPECIES.trout.coinType;
-    this.coinValue = FISH_SPECIES.trout.coinValue;
+
+    // Grab delay (anti-instant-kill)
+    this.beingEatenTimer = 0;
+    this.beingEatenDuration = 0.5;
+  }
+
+  applyStageStats() {
+    const stageData = TROUT_GROWTH[this.stage];
+    this.size = stageData.size;
+    this.speed = stageData.speed + Math.random() * 20;
+    this.coinType = stageData.coinType;
+    this.coinValue = stageData.coinValue;
   }
 
   update(dt) {
@@ -82,6 +97,19 @@ export class Trout {
       ctx.sound.play('death');
       ctx.spawnParticles(this.x, this.y, 'bubble', 5);
       return;
+    }
+
+    // Reset being eaten timer if alien is gone or far away
+    const alien = ctx.getAlien();
+    if (!alien || alien.dead) {
+      this.beingEatenTimer = 0;
+    } else {
+      const alienDx = alien.x - this.x;
+      const alienDy = alien.y - this.y;
+      const alienDist = Math.sqrt(alienDx * alienDx + alienDy * alienDy);
+      if (alienDist > this.size + alien.size) {
+        this.beingEatenTimer = Math.max(0, this.beingEatenTimer - dt * 2);
+      }
     }
 
     // Check for nearby Anemone healing
@@ -165,7 +193,28 @@ export class Trout {
         // Upgraded pellets give bonus satiation
         this.hunger = pellet.upgraded ? -25 : 0;
         this.state = 'wandering';
+        // Track feedings for growth
+        this.feedCount++;
+        this.checkGrowth();
         break;
+      }
+    }
+  }
+
+  checkGrowth() {
+    const stageData = TROUT_GROWTH[this.stage];
+    if (!stageData.feedingsToGrow) return; // Already at max stage
+
+    if (this.feedCount >= stageData.feedingsToGrow) {
+      // Evolve to next stage
+      const stages = Object.keys(TROUT_GROWTH);
+      const currentIndex = stages.indexOf(this.stage);
+      if (currentIndex < stages.length - 1) {
+        this.stage = stages[currentIndex + 1];
+        this.feedCount = 0;
+        this.applyStageStats();
+        ctx.sound.play('evolve');
+        ctx.spawnParticles(this.x, this.y, 'sparkle', 15);
       }
     }
   }
@@ -207,11 +256,30 @@ export class Trout {
       drawCtx.fillText('HUNGRY!', this.x, this.y - this.size / 2 - 5);
     }
 
-    // Label
+    // Label (stage-aware)
     drawCtx.fillStyle = '#ffa500';
     drawCtx.font = 'bold 9px Arial';
     drawCtx.textAlign = 'center';
-    drawCtx.fillText('TROUT', this.x, this.y + this.size / 2 + 12);
+    const label = this.stage === 'small' ? 'BABY' :
+                  this.stage === 'large' ? 'TROUT \u2605' : 'TROUT';
+    drawCtx.fillText(label, this.x, this.y + this.size / 2 + 12);
+
+    // Being eaten indicator (grab delay bar)
+    if (this.beingEatenTimer > 0 && this.state !== 'dying') {
+      const barWidth = 30;
+      const barHeight = 4;
+      const barX = this.x - barWidth / 2;
+      const barY = this.y - this.size / 2 - 20;
+      const progress = this.beingEatenTimer / this.beingEatenDuration;
+
+      drawCtx.fillStyle = '#333';
+      drawCtx.fillRect(barX, barY, barWidth, barHeight);
+      drawCtx.fillStyle = `rgb(${Math.floor(255 * progress)}, ${Math.floor(100 * (1 - progress))}, 0)`;
+      drawCtx.fillRect(barX, barY, barWidth * progress, barHeight);
+      drawCtx.strokeStyle = '#fff';
+      drawCtx.lineWidth = 1;
+      drawCtx.strokeRect(barX, barY, barWidth, barHeight);
+    }
   }
 }
 
@@ -716,6 +784,10 @@ export class Breeder {
 
     // Breeding timer - spawns guppy every 20-30 seconds
     this.breedTimer = 20 + Math.random() * 10;
+
+    // Grab delay (anti-instant-kill)
+    this.beingEatenTimer = 0;
+    this.beingEatenDuration = 0.5;
   }
 
   update(dt) {
@@ -727,6 +799,19 @@ export class Breeder {
         this.state = 'dead';
       }
       return;
+    }
+
+    // Reset being eaten timer if alien is gone or far away
+    const alien = ctx.getAlien();
+    if (!alien || alien.dead) {
+      this.beingEatenTimer = 0;
+    } else {
+      const alienDx = alien.x - this.x;
+      const alienDy = alien.y - this.y;
+      const alienDist = Math.sqrt(alienDx * alienDx + alienDy * alienDy);
+      if (alienDist > this.size + alien.size) {
+        this.beingEatenTimer = Math.max(0, this.beingEatenTimer - dt * 2);
+      }
     }
 
     // Hunger increases slowly
@@ -1102,6 +1187,10 @@ export class Starcatcher {
     // Animation
     this.wobble = 0;
     this.mouthOpen = 0;
+
+    // Grab delay (anti-instant-kill)
+    this.beingEatenTimer = 0;
+    this.beingEatenDuration = 0.5;
   }
 
   update(dt) {
@@ -1115,6 +1204,19 @@ export class Starcatcher {
         this.state = 'dead';
       }
       return;
+    }
+
+    // Reset being eaten timer if alien is gone or far away
+    const alien = ctx.getAlien();
+    if (!alien || alien.dead) {
+      this.beingEatenTimer = 0;
+    } else {
+      const alienDx = alien.x - this.x;
+      const alienDy = alien.y - this.y;
+      const alienDist = Math.sqrt(alienDx * alienDx + alienDy * alienDy);
+      if (alienDist > this.size + alien.size) {
+        this.beingEatenTimer = Math.max(0, this.beingEatenTimer - dt * 2);
+      }
     }
 
     // Hunger increases slowly
@@ -1361,6 +1463,10 @@ export class Crab {
     // Animation
     this.legPhase = 0;
     this.clawOpen = 0;
+
+    // Grab delay (anti-instant-kill)
+    this.beingEatenTimer = 0;
+    this.beingEatenDuration = 0.5;
   }
 
   update(dt) {
@@ -1374,6 +1480,19 @@ export class Crab {
         this.state = 'dead';
       }
       return;
+    }
+
+    // Reset being eaten timer if alien is gone or far away
+    const alien = ctx.getAlien();
+    if (!alien || alien.dead) {
+      this.beingEatenTimer = 0;
+    } else {
+      const alienDx = alien.x - this.x;
+      const alienDy = alien.y - this.y;
+      const alienDist = Math.sqrt(alienDx * alienDx + alienDy * alienDy);
+      if (alienDist > this.size + alien.size) {
+        this.beingEatenTimer = Math.max(0, this.beingEatenTimer - dt * 2);
+      }
     }
 
     // Hunger increases
@@ -1571,6 +1690,10 @@ export class Geotle {
     // Spawning timer - spawns baby trout every 25 seconds
     this.spawnInterval = FISH_SPECIES.geotle.spawnInterval;
     this.spawnTimer = this.spawnInterval;
+
+    // Grab delay (anti-instant-kill)
+    this.beingEatenTimer = 0;
+    this.beingEatenDuration = 0.5;
   }
 
   update(dt) {
@@ -1582,6 +1705,19 @@ export class Geotle {
         this.state = 'dead';
       }
       return;
+    }
+
+    // Reset being eaten timer if alien is gone or far away
+    const alien = ctx.getAlien();
+    if (!alien || alien.dead) {
+      this.beingEatenTimer = 0;
+    } else {
+      const alienDx = alien.x - this.x;
+      const alienDy = alien.y - this.y;
+      const alienDist = Math.sqrt(alienDx * alienDx + alienDy * alienDy);
+      if (alienDist > this.size + alien.size) {
+        this.beingEatenTimer = Math.max(0, this.beingEatenTimer - dt * 2);
+      }
     }
 
     // Hunger increases slowly
@@ -2172,6 +2308,10 @@ export class Beetlemuncher {
     // Animation
     this.tailPhase = 0;
     this.mouthOpen = 0;
+
+    // Grab delay (anti-instant-kill)
+    this.beingEatenTimer = 0;
+    this.beingEatenDuration = 0.5;
   }
 
   update(dt) {
@@ -2185,6 +2325,19 @@ export class Beetlemuncher {
         this.state = 'dead';
       }
       return;
+    }
+
+    // Reset being eaten timer if alien is gone or far away
+    const alien = ctx.getAlien();
+    if (!alien || alien.dead) {
+      this.beingEatenTimer = 0;
+    } else {
+      const alienDx = alien.x - this.x;
+      const alienDy = alien.y - this.y;
+      const alienDist = Math.sqrt(alienDx * alienDx + alienDy * alienDy);
+      if (alienDist > this.size + alien.size) {
+        this.beingEatenTimer = Math.max(0, this.beingEatenTimer - dt * 2);
+      }
     }
 
     // Hunger increases

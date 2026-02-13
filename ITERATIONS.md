@@ -431,6 +431,46 @@ Development history and change log. Check git commits for additional context.
 
 ---
 
+## Milestone 19: Balance Pass
+
+### Progressive Alien Spawning
+- Alien types now unlock based on totalEarned: Sylvester ($0+), Gus ($3k+), Balrog ($7k+), Destructor ($15k+)
+- Early-game Sylvester has reduced HP (30 instead of 50) when totalEarned < $1,000
+- Spawn timer scales with progression: 120-180s early, 90-120s mid, 60-90s late
+
+### Alien Knockback
+- All clickable aliens (Sylvester, Balrog, Destructor, Missile) now get knocked back on click
+- Directional impulse pushes alien away from click point
+- Laser upgrade applies stronger knockback force (250 vs 150)
+- Knockback decays exponentially over time
+
+### Trout Growth Stages
+- Trouts now evolve through 3 stages: small (baby) -> medium -> large
+- Small: 35px, 80 speed, drops silver coins ($15), needs 3 feedings to grow
+- Medium: 55px, 65 speed, drops silver coins ($15), needs 5 feedings to grow
+- Large: 70px, 55 speed, drops gold coins ($35), star indicator in label
+- Growth triggers sparkle particles and evolution sound
+- Stage and feedCount persist through save/load
+
+### Fish Grab Delay
+- Non-carnivore fish (Trout, Breeder, Starcatcher, Crab, Geotle, Beetlemuncher) now have 0.5s grab delay
+- Aliens must hold fish for 0.5s before killing (vs instant kill before)
+- Uses same beingEatenTimer system as Skellfin (2s) and MobiusDickens (3s)
+- Timer resets when alien moves away
+
+### Wave Threshold Increase
+- Wave mode (double alien spawns) now triggers at $15,000 instead of $10,000
+- Gives players more breathing room before facing multiple aliens
+
+### Constants Added
+- `ALIEN_PROGRESSION`: Unlockable alien types by totalEarned threshold
+- `ALIEN_SCALING`: Early-game Sylvester HP reduction config
+- `ALIEN_SPAWN_SCALING`: Tiered spawn timer intervals
+- `KNOCKBACK`: Force, laser force, and decay values
+- `TROUT_GROWTH`: Stage-specific size, speed, coin type, and feeding requirements
+
+---
+
 <!-- Template for new entries:
 
 ## YYYY-MM-DD
